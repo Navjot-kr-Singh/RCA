@@ -3,69 +3,88 @@ import { normalizeResponse, toPlainText } from '../parse.js'
 
 const MODES = {
   RAG: {
-    label: 'Matched known issues',
-    tone: 'match',
-    blurb: 'Grounded in the most similar issues from the knowledge base, listed below.',
+    label: 'Matched past incidents',
+    solid: true,
+    blurb: 'Based on similar past incidents, listed below.',
   },
   LLM_ONLY: {
     label: 'Model reasoning only',
-    tone: 'solo',
-    blurb:
-      'No known issue was similar enough, so this is the model’s general reasoning with no past cases behind it. Treat it as a starting point.',
+    solid: false,
+    blurb: 'No close match on record. This is the model’s general reasoning, so treat it as a starting point.',
   },
 }
 
 export default function Result({ issue, data }) {
   const result = useMemo(() => normalizeResponse(data), [data])
-  const mode = MODES[result.mode] ?? { label: result.mode, tone: 'solo', blurb: '' }
+  const mode = MODES[result.mode] ?? { label: result.mode, solid: false, blurb: '' }
   const hasAnalysis = result.rootCauses.length > 0 || result.solutions.length > 0
+  const scores = result.similar.map((item) => item.score).filter((score) => score !== null)
+  const topScore = scores.length ? Math.max(...scores) : null
+  const percent = result.confidence === null ? null : Math.round(result.confidence * 100)
 
   return (
-    <section className="card result" aria-live="polite">
+    <section className="panel result" aria-live="polite">
       <header className="result-head">
         <div>
-          <p className="eyebrow">Analysis of</p>
+          <p className="label">Analysis</p>
           <h2>{issue}</h2>
         </div>
         <CopyButton text={toPlainText(issue, result)} />
       </header>
 
-      <div className={`mode mode-${mode.tone}`}>
-        <span className="mode-badge">{mode.label}</span>
+      <div className="source">
+        <span className={`badge${mode.solid ? ' badge-solid' : ''}`}>{mode.label}</span>
         {mode.blurb && <p>{mode.blurb}</p>}
       </div>
 
       {result.rawOutput && (
-        <div className="notice notice-warn">
-          <h3>The model’s reply could not be read as structured data</h3>
-          <p className="muted">This is what it returned, unformatted:</p>
+        <div className="result-block notice">
+          <p className="label">Unformatted reply</p>
+          <p className="muted">The model’s reply could not be read as structured data. This is what it returned:</p>
           <pre className="code">{result.rawOutput}</pre>
         </div>
       )}
 
       {hasAnalysis && (
+        <dl className="stats">
+          <Stat
+            label="Model confidence"
+            value={percent === null ? 'n/a' : `${percent}%`}
+            note="Reported by the model itself"
+            meter={percent}
+          />
+          <Stat
+            label="Closest match"
+            value={topScore === null ? 'None' : topScore.toFixed(2)}
+            note={topScore === null ? 'Nothing close enough on record' : 'Relevance, from 0 to 1'}
+            meter={topScore === null ? null : Math.round(topScore * 100)}
+          />
+          <Stat
+            label="Past incidents used"
+            value={String(result.similar.length)}
+            note={result.similar.length ? 'Listed below' : 'The answer has no past case behind it'}
+          />
+        </dl>
+      )}
+
+      {hasAnalysis && (
         <div className="findings">
-          <Findings title="Likely root causes" tone="cause" items={result.rootCauses} />
-          <Findings title="Recommended fixes" tone="fix" items={result.solutions} />
+          <Findings title="Likely causes" items={result.rootCauses} />
+          <Findings title="Fixes" items={result.solutions} />
         </div>
       )}
 
-      {(result.explanation || result.confidence !== null) && (
-        <div className="reasoning">
-          {result.explanation && (
-            <div>
-              <h3>Why these causes</h3>
-              <p>{result.explanation}</p>
-            </div>
-          )}
-          {result.confidence !== null && <Confidence value={result.confidence} />}
+      {result.explanation && (
+        <div className="result-block">
+          <p className="label">Why</p>
+          <p className="why">{result.explanation}</p>
         </div>
       )}
 
       {result.similar.length > 0 && (
-        <div className="similar">
-          <h3>Similar known issues</h3>
-          <ul>
+        <div className="result-block">
+          <p className="label">Closest past incidents</p>
+          <ul className="similar">
             {result.similar.map((item, index) => (
               <SimilarIssue key={`${item.title}-${index}`} item={item} open={index === 0} />
             ))}
@@ -76,10 +95,27 @@ export default function Result({ issue, data }) {
   )
 }
 
-function Findings({ title, tone, items }) {
+function Stat({ label, value, note, meter = null }) {
   return (
-    <div className={`findings-col findings-${tone}`}>
-      <h3>{title}</h3>
+    <div className="stat">
+      <dt className="label">{label}</dt>
+      <dd>
+        <span className="stat-value">{value}</span>
+        {meter !== null && (
+          <span className="meter" aria-hidden="true">
+            <span style={{ width: `${meter}%` }} />
+          </span>
+        )}
+        <span className="stat-note">{note}</span>
+      </dd>
+    </div>
+  )
+}
+
+function Findings({ title, items }) {
+  return (
+    <div className="findings-col">
+      <p className="label">{title}</p>
       {items.length === 0 ? (
         <p className="muted">None returned.</p>
       ) : (
@@ -96,23 +132,6 @@ function Findings({ title, tone, items }) {
   )
 }
 
-function Confidence({ value }) {
-  const percent = Math.round(value * 100)
-  const level = value >= 0.8 ? 'High' : value >= 0.5 ? 'Medium' : 'Low'
-  return (
-    <div className="confidence">
-      <div className="confidence-head">
-        <h3>Model confidence</h3>
-        <strong>{percent}%</strong>
-      </div>
-      <div className="meter" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-label="Model confidence">
-        <span style={{ width: `${percent}%` }} />
-      </div>
-      <p className="muted">{level}. Self-reported by the model, not measured.</p>
-    </div>
-  )
-}
-
 function SimilarIssue({ item, open }) {
   return (
     <li className="similar-item">
@@ -120,7 +139,7 @@ function SimilarIssue({ item, open }) {
         <summary>
           <span className="similar-title">{item.title}</span>
           {item.score !== null && (
-            <span className="score" title="Similarity to your description, from 0 to 1">
+            <span className="score" title="Relevance to your description, from 0 to 1">
               <span className="meter meter-small" aria-hidden="true">
                 <span style={{ width: `${Math.round(item.score * 100)}%` }} />
               </span>
@@ -129,8 +148,8 @@ function SimilarIssue({ item, open }) {
           )}
         </summary>
         <div className="similar-body">
-          <SimilarList title="Recorded causes" items={item.causes} />
-          <SimilarList title="Recorded fixes" items={item.solutions} />
+          <SimilarList title="Recorded cause" items={item.causes} />
+          <SimilarList title="Recorded fix" items={item.solutions} />
         </div>
       </details>
     </li>
@@ -141,7 +160,7 @@ function SimilarList({ title, items }) {
   if (items.length === 0) return null
   return (
     <div>
-      <h4>{title}</h4>
+      <p className="label">{title}</p>
       <ul>
         {items.map((entry, index) => (
           <li key={index}>{entry}</li>
@@ -165,7 +184,7 @@ function CopyButton({ text }) {
   }
 
   return (
-    <button type="button" className="button button-quiet" onClick={copy}>
+    <button type="button" className="button button-ghost button-small" onClick={copy}>
       {copied ? 'Copied' : 'Copy'}
     </button>
   )

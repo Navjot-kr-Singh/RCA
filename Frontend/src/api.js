@@ -1,6 +1,9 @@
 // Override with VITE_API_URL in Frontend/.env.local if the backend runs elsewhere.
 export const API_URL = (import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000').replace(/\/+$/, '')
 
+// The landing site this app is reached from. Override with VITE_LANDING_URL.
+export const LANDING_URL = (import.meta.env.VITE_LANDING_URL ?? 'http://localhost:3000').replace(/\/+$/, '')
+
 export class ApiError extends Error {
   constructor(kind, message) {
     super(message)

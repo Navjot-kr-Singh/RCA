@@ -1,14 +1,26 @@
 // Turns the backend's /analyze response into a shape the UI can render directly.
 //
-// Backend contract (Backend/rca_engine.py):
-//   mode            "RAG" when a known issue is similar enough, otherwise "LLM_ONLY"
+// Backend contract (the fields Backend/main.py fills in add_legacy_fields; the
+// response also carries richer ones, such as hypotheses and first_checks, not used here):
+//   mode            "RAG" when a past incident is relevant enough, otherwise "LLM_ONLY"
 //   analysis        { root_causes, solutions, confidence, explanation }
 //                   or { error, raw_output } when the model's reply was not valid JSON
 //   similar_issues  [{ content, similarity_score }], empty in LLM_ONLY mode
 
+// The model does not always return a flat list of strings: it sometimes nests
+// objects such as { issue, causes: [...] }. Keep the nested lists, drop the wrapper.
 function asList(value) {
-  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean)
-  if (typeof value === 'string' && value.trim()) return [value.trim()]
+  if (Array.isArray(value)) return value.flatMap(asList)
+  if (value && typeof value === 'object') {
+    const parts = Object.values(value)
+    const lists = parts.filter(Array.isArray)
+    if (lists.length) return lists.flatMap(asList)
+    return asList(parts.filter((part) => typeof part === 'string').join(': '))
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    const text = String(value).trim()
+    return text ? [text] : []
+  }
   return []
 }
 
@@ -38,26 +50,9 @@ function field(content, name) {
   return match ? match[1].trim() : ''
 }
 
-// The backend joins each issue's causes and solutions with ", ". Split them back,
-// leaving commas inside parentheses or mid-sentence ("checks HTTP, not dependencies") alone.
-function splitItems(text) {
-  const items = []
-  let depth = 0
-  let current = ''
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    if (ch === '(') depth++
-    if (ch === ')') depth = Math.max(0, depth - 1)
-    if (ch === ',' && depth === 0 && text[i + 1] === ' ' && /[A-Z]/.test(text[i + 2] ?? '')) {
-      items.push(current.trim())
-      current = ''
-      i++
-      continue
-    }
-    current += ch
-  }
-  if (current.trim()) items.push(current.trim())
-  return items
+// Each past incident carries its cause and its fix as one passage of prose.
+function passage(text) {
+  return text ? [text] : []
 }
 
 function parseSimilar(entry) {
@@ -65,8 +60,8 @@ function parseSimilar(entry) {
   const title = field(content, 'Issue')
   return {
     title: title || content.trim(),
-    causes: splitItems(field(content, 'Causes')),
-    solutions: splitItems(field(content, 'Solutions')),
+    causes: passage(field(content, 'Causes')),
+    solutions: passage(field(content, 'Solutions')),
     score: asConfidence(entry?.similarity_score),
   }
 }

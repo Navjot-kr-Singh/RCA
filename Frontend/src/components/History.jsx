@@ -11,9 +11,9 @@ function timeAgo(timestamp) {
 
 export default function History({ entries, activeId, onOpen, onClear }) {
   return (
-    <section className="card history">
+    <section className="panel history">
       <div className="history-head">
-        <h2>Recent analyses</h2>
+        <h2 className="label">Recent</h2>
         {entries.length > 0 && (
           <button type="button" className="link" onClick={onClear}>
             Clear
@@ -22,7 +22,7 @@ export default function History({ entries, activeId, onOpen, onClear }) {
       </div>
 
       {entries.length === 0 ? (
-        <p className="muted">Analyses you run appear here so you can reopen them without asking again.</p>
+        <p className="muted">Your last 10 analyses appear here. They stay in this browser.</p>
       ) : (
         <ul>
           {entries.map((entry) => (
@@ -34,7 +34,7 @@ export default function History({ entries, activeId, onOpen, onClear }) {
               >
                 <span className="history-issue">{entry.issue}</span>
                 <span className="history-meta">
-                  {MODE_TAGS[entry.data?.mode] ?? entry.data?.mode} · {timeAgo(entry.at)}
+                  {MODE_TAGS[entry.data?.mode] ?? entry.data?.mode} <span className="label-rule">|</span> {timeAgo(entry.at)}
                 </span>
               </button>
             </li>
