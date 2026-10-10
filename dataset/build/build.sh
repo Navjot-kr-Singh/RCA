@@ -9,6 +9,8 @@ echo "### extract: curated index"
 python3 -u extract_danluu.py 2>&1 | sed -n '1,2p'
 echo "### extract: github availability reports"
 python3 -u extract_gh2.py 2>&1 | sed -n '1,2p'
+echo "### extract: engineering blog postmortems"
+python3 -u extract_blogs.py 2>&1 | sed -n '1,2p'
 echo "### extract: aws post-event summaries"
 python3 -u extract_aws.py 2>&1 | sed -n '1,1p'
 echo "### assemble"

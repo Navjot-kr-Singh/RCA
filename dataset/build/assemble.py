@@ -61,7 +61,8 @@ def main():
     new = (load('raw/extracted.json', 'statuspage_postmortem')
            + load('raw/extracted_gh.json', 'github_availability_report')
            + load('raw/extracted_aws.json', 'aws_post_event_summary')
-           + load('raw/extracted_danluu.json', 'curated_index+source_page'))
+           + load('raw/extracted_danluu.json', 'curated_index+source_page')
+           + load('raw/extracted_blogs.json', 'engineering_blog_postmortem'))
     print(f'base={len(base)} new={len(new)}')
 
     # ---- 1. dedupe new against base and against itself -------------------
@@ -140,9 +141,16 @@ def main():
     cache.update(status)
     json.dump(cache, open('raw/newurlstatus.json', 'w'), indent=1)
     print('url status:', Counter(status.values()).most_common())
-    live = [x for x in kept if status.get(x['source_url'], '000') not in
-            ('404', '410', '000', 'ERR', '526')]
-    print('entries with live urls:', len(live), '(dropped', len(kept) - len(live), ')')
+    # A source URL that a reader cannot open is not a citation. Many retired
+    # or restricted Statuspage pages answer 403 on every URL form, so require
+    # a clean 200 (after redirects) rather than merely "not 404".
+    live = [x for x in kept if status.get(x['source_url'], '000') == '200']
+    from collections import Counter as _C
+    print('entries with a 200 source url:', len(live),
+          '(dropped', len(kept) - len(live), ')')
+    print('  dropped by status:',
+          dict(_C(status.get(x['source_url'], '000') for x in kept
+                  if status.get(x['source_url'], '000') != '200')))
 
     # ---- 3. field validation --------------------------------------------
     final_new, bad = [], Counter()
@@ -162,8 +170,12 @@ def main():
         if len(x['issue']) < 25:
             bad['issue_too_short'] += 1
             continue
-        if min(len(x['root_cause']), len(x['solution'])) < 45:
-            bad['cause_or_fix_too_short'] += 1
+        if len(x['root_cause']) < 45:
+            bad['cause_too_short'] += 1
+            continue
+        # solution is None when the publisher never stated a remediation
+        if x.get('solution') is not None and len(x['solution']) < 45:
+            bad['fix_too_short'] += 1
             continue
         final_new.append(x)
     print('new entries passing validation:', len(final_new), dict(bad))

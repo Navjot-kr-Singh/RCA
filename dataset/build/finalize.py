@@ -2,7 +2,8 @@
 import json, re
 from collections import Counter
 
-OUT = '../gold_incidents.json'
+OUT = '../gold_incidents.json'            # complete entries only
+OUT_ALL = '../gold_incidents_all.json'    # superset, including cause-only
 REPORT = '../DATASET_REPORT.md'
 
 # host-derived org slugs that need their real casing
@@ -82,11 +83,26 @@ def main():
 
     cand.sort(key=lambda x: (0 if x['provenance'] == 'original_curated' else 1,
                              str(x['incident_date']), str(x['org'])))
+
+    # The shipped dataset holds only complete entries: issue, root_cause and a
+    # published solution. Entries where the publisher stated a cause but never a
+    # remediation are real incidents, so they are preserved in the superset file
+    # rather than discarded.
+    allrows = [dict(e) for e in cand]
+    for i, e in enumerate(allrows, 1):
+        e['id'] = f'GOLD-{i:04d}'
+    json.dump(allrows, open(OUT_ALL, 'w'), indent=2)
+
+    cand = [e for e in cand if e.get('solution') is not None]
     for i, e in enumerate(cand, 1):
         e['id'] = f'GOLD-{i:04d}'
 
     json.dump(cand, open(OUT, 'w'), indent=2)
+    print(f'superset (incl. cause-only): {len(allrows)} -> {OUT_ALL}')
+    print(f'complete entries only      : {len(cand)} -> {OUT}')
 
+    n_all = len(allrows)
+    n_all_minus_n = n_all - len(cand)
     cats = Counter(e['category'] for e in cand)
     sevs = Counter(e['severity'] for e in cand)
     provs = Counter(e['provenance'] for e in cand)
@@ -118,7 +134,7 @@ source URL that returned a non-404 status at build time.
 | `id` | `GOLD-0001` .. `GOLD-{n:04d}`, renumbered on every build |
 | `issue` | the customer-visible symptom |
 | `root_cause` | the mechanism that caused it |
-| `solution` | what was done to resolve or mitigate it |
+| `solution` | what was done to resolve or mitigate it (always populated in this file) |
 | `severity` | `Critical` / `High` / `Medium` / `Low` |
 | `category` | one of 11 values, see below |
 | `org` | the organisation that published the report |
@@ -141,6 +157,14 @@ source URL that returned a non-404 status at build time.
 - `curated_index+source_page` — the danluu/post-mortems index, with cause text
   cross-checked against the original write-up.
 
+## Completeness
+
+Every entry in this file is complete: `issue`, `root_cause` and `solution` are
+all populated. Entries where the publisher stated a cause but never published a
+remediation are **not** in this file; they are kept in
+`gold_incidents_all.json` ({n_all} rows total, {n_all} - {n} = {n_all_minus_n}
+cause-only) so nothing real is discarded.
+
 ## Category
 
 {tbl(cats, 'category', pct=True)}
@@ -162,12 +186,14 @@ Every entry:
 
 1. has a `source_url` that resolved (non-404) at build time;
 2. has an `incident_date` matching `YYYY`, `YYYY-MM` or `YYYY-MM-DD`;
-3. has `root_cause` and `solution` of at least 45 characters, and an `issue` of
-   at least 25, all three mutually distinct — no entry restates its symptom as
-   its cause;
-4. is deduplicated against every other entry by source URL and by root-cause
+3. has a `root_cause` of at least 45 characters and an `issue` of at least 25,
+   mutually distinct — no entry restates its symptom as its cause;
+4. has a `solution` of at least 45 characters. A fix is never invented to fill
+   the field, so incidents whose publisher never stated a remediation are held
+   in `gold_incidents_all.json` instead of this file;
+5. is deduplicated against every other entry by source URL and by root-cause
    shingle similarity (Jaccard > 0.55 rejected);
-5. states an actual causal mechanism. Reports that only assert one
+6. states an actual causal mechanism. Reports that only assert one
    ("we have identified the root cause and are working on a fix"), or that
    offer an apology, a responder-paging note or a downstream-impact note in
    place of a cause, were rejected rather than kept as filler.

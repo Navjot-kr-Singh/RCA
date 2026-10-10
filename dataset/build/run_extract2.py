@@ -7,8 +7,15 @@ base=json.load(open('clean_base.json')); have={x['source_url'].rstrip('/') for x
 out=[];rej=Counter()
 for x in pool:
     if x['url'].rstrip('/') in have: continue
-    e,why=build(x['postmortem'] if x['postmortem'] else x['body'],x['org'],
-                (x.get('created_at') or '')[:10],x['url'],x.get('name') or '',x.get('impact'))
+    raw = x['postmortem'] if x['postmortem'] else x['body']
+    args = (raw, x['org'], (x.get('created_at') or '')[:10], x['url'],
+            x.get('name') or '', x.get('impact'))
+    e, why = build(*args)
+    if not e and why == 'no_solution':
+        # the cause is the RCA label; a published remediation is a bonus, so
+        # keep the incident with solution=None rather than discarding it
+        e, why = build(*args, require_fix=False)
+        if e: rej['recovered_cause_only'] += 1
     if not e: rej[why]+=1; continue
     e,why=validate(e)
     if not e: rej['polish:'+why]+=1; continue

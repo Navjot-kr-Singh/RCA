@@ -20,6 +20,9 @@ def tidy(t, _rounds=4):
 def _tidy_once(t):
     if not t: return ''
     t=re.sub(r'\s+',' ',t).strip()
+    # a stripped timestamp can leave a leading preposition before a
+    # lowercase word: "At we observed ..."
+    t=re.sub(r'^(?:At|On|From|By|Between|During|Around|Until)\s+(?=[a-z])','',t)
     t=re.sub(r'\bOn\s*,\s*','',t)
     t=re.sub(r'\bOn\s*,?\s*at\s*,\s*','',t)
     # residue left behind when timestamps were stripped, e.g. "between approximately and,"
@@ -35,6 +38,10 @@ def _tidy_once(t):
     t=re.sub(r'\s+(?:to|and|until|through)\s*(?=[,.)])','',t,flags=re.I)
     t=re.sub(r'[,:]\s*~\s*(?=[.,:]|$)','',t)
     t=re.sub(r'\s*~\s*(?=[.,:]|$)','',t)
+    # a time range whose endpoints were stripped leaves dashes and
+    # dangling prepositions, e.g. "during two periods: -and -on."
+    t=re.sub(r'(?:(?<=\s)|^)[\u2013\u2014-]\s*(?:and|to|on|at|from)\b','',t,flags=re.I)
+    t=re.sub(r':\s*(?=[.,;]|$)','',t)
     t=re.sub(r'\s*\(\s*\)\s*',' ',t)
     t=t.replace('‌','').replace('​','').replace('­','')
     # markdown links and footnote refs -> their visible text
@@ -97,7 +104,11 @@ def ok_sentence(t,kind):
         # a progress/status update is not a cause - unless it also names one
         if not names and re.search(
                 r'^(?:we (?:are|have|will|continue)|the team (?:is|are|has)|'
+                r'our (?:\w+ ){0,2}team (?:is|are|has)|'
                 r'(?:a|the) fix (?:is|has been|will be))\b'
+                r'|working with urgency|to identify the root cause|'
+                r'another update|more information becomes available|'
+                r'investigation (?:is|remains) (?:ongoing|underway)'
                 r'|\b(?:are|is) seeing (?:gradual )?recovery|continue to monitor|'
                 r'deploy(?:ing)? a fix for|working to (?:restore|resolve|identify)', t, re.I):
             return False
@@ -112,6 +123,32 @@ def ok_sentence(t,kind):
             r'|current status\b|currently experiencing|we are currently'
             r'|monitoring (?:the )?(?:situation|services)', t, re.I)
         if hedged and not names:
+            return False
+        # a contentless attribution ("due to an issue", "because of a problem")
+        # is a restatement, not a cause, unless it points at something concrete
+        if re.search(r'\b(?:due to|because of|owing to)\s+(?:a|an|the)\s+'
+                     r'(?:issue|problem|error|fault|incident|condition)\b'
+                     r'(?!\s+(?:with|in|on|at|affecting)\s+\S)', t, re.I):
+            return False
+        # "we observed elevated failure rates" restates the symptom
+        if (re.search(r'\bwe (?:observed|saw|noticed|detected)\b', t, re.I)
+                and re.search(r'elevated|increased|degraded|failure rates?|'
+                              r'error rates?|latency|timeouts?', t, re.I)
+                and not names):
+            return False
+        # retrospective framing is not a cause
+        if re.search(r'reinforced the importance|highlighted the need|lessons? learned|'
+                     r'\bkey takeaway|going forward we|importance of (?:clear|having)|'
+                     r'underscored the', t, re.I):
+            return False
+        # a recovery confirmation is not a cause
+        if re.search(r'operating normally|back to normal|fully restored|have been restored|'
+                     r'has been resolved|returned to (?:normal|baseline)|'
+                     r'confirmed that .{0,60}(?:normal|restored|resolved|healthy)|'
+                     r'no further impact|services? (?:are|is) (?:now )?(?:stable|healthy)',
+                     t, re.I) and not re.search(
+                     r'\b(?:caused by|due to a|due to an|because|resulted from|stemmed from|'
+                     r'triggered by|root cause)\b', t, re.I):
             return False
         # apology / sympathy text is not a cause
         if re.search(r'regret the inconvenience|appreciate your (?:patience|understanding)|'
@@ -152,13 +189,13 @@ IMPACT_AS_FIX=re.compile(r'^(?:some|all|no)?\s*(?:user |customer )?data was (?:p
 def structural_ok(e):
     """Checks that apply to every entry regardless of how it was built."""
     for k in ('issue','root_cause','solution'):
-        v=e.get(k,'')
+        v=e.get(k) or ''
         if META.search(v): return 'editorial_commentary'
         if MDLEFT.search(v): return 'markdown_leftover'
     for k in ('issue','root_cause','solution'):
-        v=e.get(k,'')
+        v=e.get(k) or ''
         if FRAGMENT.match(v) or unbalanced(v): return 'sentence_fragment:'+k
-    if IMPACT_AS_FIX.search(e.get('solution','')): return 'impact_as_solution'
+    if IMPACT_AS_FIX.search(e.get('solution') or ''): return 'impact_as_solution'
     # computing-era incidents only (keeps ARPANET/Apollo, drops e.g. a 1628 shipwreck)
     y=str(e.get('incident_date',''))[:4]
     if y.isdigit() and int(y)<1960: return 'out_of_scope_era'
@@ -169,16 +206,26 @@ def validate(e):
     """returns (entry, None) or (None, reason)"""
     e=dict(e)
     for k in ('issue','root_cause','solution'):
+        if k=='solution' and e.get('solution') is None:
+            continue              # remediation was never published
         e[k]=tidy(e.get(k,''))
     why=structural_ok(e)
     if why: return None,why
     if not ok_sentence(e['root_cause'],'rc'): return None,'rc_invalid'
-    if not ok_sentence(e['solution'],'sol'): return None,'sol_invalid'
+    if e.get('solution') is not None:
+        sol=e['solution']
+        if not ok_sentence(sol,'sol'): return None,'sol_invalid'
+        # "Summary On Nov 9th the certificate was replaced with a dummy cert"
+        # describes the fault, not the remediation
+        if re.search(r'^(?:summary|background|timeline|what happened|'
+                     r'impact summary|incident summary)\b', sol, re.I):
+            return None,'sol_is_section_header'
     if len(e['issue'])<25: return None,'issue_invalid'
     # rc and solution must not be the same text
     a=re.sub(r'[^a-z0-9]','',e['root_cause'].lower())
-    b=re.sub(r'[^a-z0-9]','',e['solution'].lower())
-    if a==b or a in b or b in a: return None,'rc_eq_sol'
+    if e.get('solution') is not None:
+        b=re.sub(r'[^a-z0-9]','',e['solution'].lower())
+        if a==b or a in b or b in a: return None,'rc_eq_sol'
     # issue must not duplicate rc
     i=re.sub(r'[^a-z0-9]','',e['issue'].lower())
     if i and (i in a or a in i): return None,'issue_eq_rc'

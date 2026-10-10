@@ -31,8 +31,13 @@ for i, e in enumerate(d, 1):
     if e.get('id') != f'GOLD-{i:04d}':
         bad('id_not_sequential', e.get('id'))
     for k in REQUIRED:
-        if k not in e or e[k] in (None, ''):
+        if k not in e:
             bad('missing_field:' + k, e.get('id'))
+        elif e[k] in (None, ''):
+            # gold_incidents.json ships complete entries only, so `solution`
+            # must be populated here. Cause-only rows live in
+            # gold_incidents_all.json and are audited by audit_all.py.
+            bad('empty_field:' + k, e.get('id'))
     if e.get('category') not in CATS:
         bad('bad_category', e.get('id'), str(e.get('category')))
     if e.get('severity') not in SEVS:
@@ -52,15 +57,17 @@ for i, e in enumerate(d, 1):
     if not str(e.get('source_url', '')).startswith('http'):
         bad('bad_url', e.get('id'))
     # degenerate text
-    iss, rc, sol = (str(e.get(k, '')).strip() for k in ('issue', 'root_cause', 'solution'))
+    iss, rc = (str(e.get(k, '')).strip() for k in ('issue', 'root_cause'))
+    sol = e.get('solution')
+    sol = sol.strip() if isinstance(sol, str) else None
     if rc == iss:
         bad('rc_eq_issue', e.get('id'))
     if sol == rc:
         bad('sol_eq_rc', e.get('id'))
     if len(rc) < 45:
         bad('rc_short', e.get('id'), rc[:60])
-    if len(sol) < 45:
-        bad('sol_short', e.get('id'), sol[:60])
+    if sol is None or len(sol) < 45:
+        bad('sol_short', e.get('id'), (sol or 'None')[:60])
     if len(iss) < 25:
         bad('issue_short', e.get('id'), iss[:60])
     # leftover artifacts
@@ -68,7 +75,8 @@ for i, e in enumerate(d, 1):
                  r'|\b(?:on|at|from|between)\s+(?:on|at|to|and)\b'
                  r'|~\s*[–—-]|~\s*[.,:]'
                  r'|\s(?:to|and|until|through)\s*[,.)]'
-                 r'|\b(?:between|from|at|on|by|during|around|until)\s*[.,]', iss + ' ' + rc + ' ' + sol):
+                 r'|(?<![-\w])(?:between|from|at|on|by|during|around|until)\s*[.,]',
+                 iss + ' ' + rc + ' ' + (sol or '')):
         bad('text_artifact', e.get('id'))
     if re.search(r'we (?:deeply )?regret|apologi[sz]e|appreciate your patience', rc, re.I):
         bad('apology_as_cause', e.get('id'))

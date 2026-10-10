@@ -84,6 +84,11 @@ for k, url in sorted(idx.items()):
                else 'Medium' if mins >= 30 else 'Low')
 
         built, why = build(prose, 'GitHub', date, url, '', None)
+        if not built and why == 'no_solution':
+            built, why = build(prose, 'GitHub', date, url, '', None,
+                               require_fix=False)
+            if built:
+                stats['recovered_cause_only'] += 1
         if not built:
             stats['build:' + why] += 1
             continue
