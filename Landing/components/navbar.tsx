@@ -2,11 +2,9 @@ import { Suspense } from "react";
 import { Show, UserButton } from "@clerk/nextjs";
 import { ButtonLink } from "@/components/button-link";
 import { Logo } from "@/components/logo";
-import { site } from "@/lib/site";
 
 const links = [
   { href: "/#how-it-works", label: "How it works" },
-  { href: site.repoUrl, label: "Source" },
 ];
 
 function SignedOutButtons() {

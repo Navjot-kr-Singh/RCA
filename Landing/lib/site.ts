@@ -15,10 +15,9 @@ export const site = {
   url: address(process.env.NEXT_PUBLIC_SITE_URL, "http://localhost:3000"),
   analyzerUrl: address(process.env.NEXT_PUBLIC_ANALYZER_URL, "http://127.0.0.1:5173"),
   apiUrl: address(process.env.NEXT_PUBLIC_API_URL, "http://127.0.0.1:8000"),
-  repoUrl: "https://github.com/Navjot-kr-Singh/RCA",
   legal: {
-    owner: "Navjot Kumar Singh",
-    email: "navjotkumarsingh81@gmail.com",
+    owner: "Mehak",
+    email: "gmehak350@gmail.com",
     // Not provided yet. Both must be filled in before launch; the legal pages
     // show a visible "to be added" marker while they are null.
     address: null as string | null,
