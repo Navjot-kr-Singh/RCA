@@ -15,6 +15,7 @@ export const site = {
   url: address(process.env.NEXT_PUBLIC_SITE_URL, "http://localhost:3000"),
   analyzerUrl: address(process.env.NEXT_PUBLIC_ANALYZER_URL, "http://127.0.0.1:5173"),
   apiUrl: address(process.env.NEXT_PUBLIC_API_URL, "http://127.0.0.1:8000"),
+  repoUrl: "https://github.com/mehakgoel20/deja-view",
   legal: {
     owner: "Mehak",
     email: "gmehak350@gmail.com",
