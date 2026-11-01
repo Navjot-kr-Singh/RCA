@@ -2,7 +2,7 @@
 
 ```mermaid
 flowchart TB
-    alert["scripts/alert.sh<br/>or a person"] -->|"posts alert"| chat["Discord / Slack<br/>#incidents"]
+    alert["scripts/alert.sh<br/>or a person"] -->|"posts alert"| chat["Discord<br/>#incidents"]
     chat <-->|"bridge"| room
 
     subgraph room["Switch room: shared messages, tasks, decisions"]
