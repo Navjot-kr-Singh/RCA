@@ -1,14 +1,99 @@
-# Root Cause Analysis assistant
+# OnCall Room
+
+**Your on-call team, with the memory of 2,856 past outages.**
+
+OnCall Room turns a Discord channel into an incident war room. When an alert arrives, three AI agents work alongside the on-call engineers in a Switch room. One triages the alert, one finds likely root causes in 2,856 real production incidents, and one checks the system and proposes a fix. No fix is applied until a person approves it.
+
+Built for the Flip the Switch hackathon (WeMakeDevs × Switch).
+
+## The problem
+
+- An alert fires at 3 AM, and the on-call engineer is alone with the logs and a search engine.
+- Another company has often hit the same failure and published how they fixed it, but that knowledge doesn't reach the engineer in time.
+- After the incident nobody writes the postmortem, so the next on-call starts from zero.
+
+## How it works
+
+See the [architecture diagram](docs/architecture.md).
+
+1. **Alert.** `scripts/alert.sh` runs a synthetic checkout against the service. If it fails, the alert is posted in the incident channel.
+2. **Triage.** The Triager restates the alert in one line, sets severity and category, and hands it to the RCA Agent.
+3. **Root cause.** The RCA Agent asks the RCA API, which searches 2,856 past incidents, and posts the top hypotheses with evidence IDs and source links.
+4. **Checks.** The Fixer runs read-only checks, pastes the exact output, and proposes one fix as an exact command.
+5. **Approval.** A person replies `@<team>-fixer approve`. Only then does the Fixer apply the fix, which verifies itself.
+6. **Learning loop.** The Triager writes the postmortem, and the resolved incident is added to the index so the next similar alert can cite it. *(Planned.)*
+
+## Why Switch is central
+
+Switch is where the agents and the people meet. Each agent acts only on messages that address it by name, so every handoff (Triager to RCA to Fixer) is an @mention in the shared room that the whole team can read. The approval is a person's message in that same room, and the room keeps the history for whoever joins the incident later. Without Switch the agents could neither hand work to each other nor ask the team for a decision.
+
+## Quickstart
+
+You need Python 3.10+ and an OpenAI API key for the RCA API.
+
+1. **Start the RCA API** on port 8000, as described in [Running it](#running-it) below.
+2. **Start the demo shop** on port 8001:
+
+   ```bash
+   cd demo-shop
+   python3 -m venv .venv
+   .venv/bin/pip install -r requirements.txt
+   .venv/bin/uvicorn main:app --host 127.0.0.1 --port 8001
+   ```
+
+3. **Run the scenario** from the repository root, in a second terminal:
+
+   ```bash
+   scripts/break.sh redis-oom   # checkout starts returning 503
+   scripts/alert.sh             # prints the alert; posts it to Discord if ALERT_WEBHOOK_URL is set
+   scripts/fix.sh redis-oom     # restores the cache, then checks checkout and health
+   ```
+
+4. **Agents.** Their instructions are in [switch/agent-instructions.md](switch/agent-instructions.md). The Switch template that creates the room and the three agents is in progress.
+
+To run the demo shop's tests: `cd demo-shop && .venv/bin/python -m unittest tests.test_shop -v`.
+
+## Demo scenarios
+
+| Scenario | Break | Fix | Status |
+|---|---|---|---|
+| Redis out of memory: checkout returns 503 | `scripts/break.sh redis-oom` | `scripts/fix.sh redis-oom` | Ready |
+| Database connection pool exhausted | | | Planned |
+| Bad deploy or config typo | | | Planned |
+
+In the Redis scenario, `break.sh` shrinks the shop's in-memory cache and sets the `noeviction` policy, so new checkouts fail with Redis's real OOM error. `fix.sh` switches the policy to `allkeys-lru` and restores the limit, without deleting the orders already in the cache.
+
+## Safety
+
+- **Human approval.** The Fixer applies a fix only after a person addresses it with "approve". Approval from another agent, or a vague "looks good", doesn't count. See [switch/agent-instructions.md](switch/agent-instructions.md).
+- **Read-only first.** The Fixer's only check is `GET /health`, which changes nothing.
+- **Sandbox only.** The demo shop listens on 127.0.0.1, and every script refuses to run unless `SHOP_URL` points at localhost. The shop's `/admin/cache/config` endpoint has no authentication; it exists only for the local sandbox and must never be exposed.
+- **Evidence.** The RCA API drops citations to incidents it did not retrieve, and the RCA Agent may cite only IDs from the API response.
+- **Secrets.** The OpenAI key lives in `Backend/.env`, which is gitignored, and the Discord webhook URL is read from the `ALERT_WEBHOOK_URL` environment variable. Neither is committed.
+
+## Technologies
+
+- **Agents and chat:** Switch, Discord
+- **RCA API:** Python, FastAPI, OpenAI (`gpt-4.1-mini`, `text-embedding-3-small`), FAISS, BM25
+- **Demo shop:** FastAPI, Uvicorn, Pydantic, unittest
+- **Scripts:** Bash, curl
+- **Apps:** React + Vite (analysis app), Next.js (landing site)
+
+## Team
+
+Vertos: Navjot Kumar Singh (lead) and Sneha Mishra.
+
+## RCA engine
 
 Describe a production issue in plain words and get likely root causes, recommended fixes, and the similar known issues the answer was based on.
 
-## How it works
+### How the engine works
 
 1. **Search.** The description is rewritten into a clean symptom, then matched against 2,856 past production incidents using both embeddings and keyword search. A model reranks the candidates and the top five are kept, at most two per organisation.
 2. **Ground.** If the best match is relevant enough (4 out of 10 or more), those incidents are passed to the model as evidence. The response is tagged `RAG` and each hypothesis cites the incidents that support it.
 3. **Fall back.** Otherwise the model reasons without past incidents and the response is tagged `LLM_ONLY`.
 
-## Project layout
+### Project layout
 
 | Path | What it is |
 |---|---|
@@ -19,10 +104,14 @@ Describe a production issue in plain words and get likely root causes, recommend
 | `Frontend/` | React + Vite analysis app. |
 | `Landing/` | Public site (Next.js, Clerk sign-in): landing page, dashboard, privacy and terms. See its own README. |
 | `dataset/` | The incident datasets and the scripts that built them. |
+| `demo-shop/` | Sandbox checkout service with a fake Redis, used for the incident demo. |
+| `scripts/` | `break.sh`, `fix.sh` and `alert.sh` for the demo scenarios. |
+| `switch/` | Agent instructions for the Switch room. |
+| `docs/` | Architecture diagram. |
 
 `Backend/rca_engine.py` and `Backend/dataset/production_issues_75.json` are the earlier, smaller engine. The API no longer uses them.
 
-## Running it
+### Running it
 
 You need Python 3.9+, Node 20+, and an OpenAI API key.
 
@@ -48,7 +137,7 @@ npm run dev
 
 Open http://127.0.0.1:5173. The app expects the API at `http://127.0.0.1:8000`; to point it elsewhere, set `VITE_API_URL` in `Frontend/.env.local`.
 
-## API
+### API
 
 `POST /analyze` with `{"issue": "Redis out of memory errors"}` returns, among other fields:
 
@@ -74,9 +163,13 @@ Open http://127.0.0.1:5173. The app expects the API at `http://127.0.0.1:8000`; 
 
 `root_causes`, `solutions`, `confidence`, `explanation` and `similar_issues` are the simpler fields the analysis app reads. An answer takes roughly 6 to 9 seconds. `GET /` reports how many incidents are indexed. Interactive docs are at http://127.0.0.1:8000/docs.
 
-## Datasets
+### Datasets
 
 - `gold_incidents.json`: 2,856 real production incidents, each with a source URL. See `DATASET_REPORT.md`.
 - `synthetic_incidents.json`: 1,383 generated incidents in the same schema, marked `data_type: "synthetic"`. See `SYNTHETIC_REPORT.md`.
 
 The raw scraped pages the gold set was extracted from are not included in this repository because of their size.
+
+### Data sources and attribution
+
+Every incident in `gold_incidents.json` was extracted from a public incident report: company status-page postmortems (2,504), GitHub availability reports (73), engineering-blog postmortems (55), the danluu/post-mortems index (25) and an AWS post-event summary (1), plus 198 hand-curated entries. They cover 849 organisations. Each entry keeps the `source_url` of the report it came from, and the original reports belong to the organisations that published them.
