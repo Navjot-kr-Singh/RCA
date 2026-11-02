@@ -49,7 +49,7 @@ You need Python 3.9+ and an OpenAI API key for the RCA API.
    scripts/fix.sh redis-oom     # restores the cache, then checks checkout and health
    ```
 
-4. **Agents.** Their instructions are in [switch/agent-instructions.md](switch/agent-instructions.md). The Switch template that creates the room and the three agents is in progress.
+4. **Agents.** In Switch Console, open **Templates**, paste [switch/oncall-room.template.yaml](switch/oncall-room.template.yaml), set **OnCall Room repo folder** to this repository's absolute path, and create. It adds the Triager, RCA Agent and Fixer to the `incidents` room, or creates a new room if there is none. Their instructions are also in [switch/agent-instructions.md](switch/agent-instructions.md).
 
 To run the demo shop's tests: `cd demo-shop && .venv/bin/python -m unittest tests.test_shop -v`.
 
@@ -106,7 +106,7 @@ Describe a production issue in plain words and get likely root causes, recommend
 | `dataset/` | The incident datasets and the scripts that built them. |
 | `demo-shop/` | Sandbox checkout service with a fake Redis, used for the incident demo. |
 | `scripts/` | `break.sh`, `fix.sh` and `alert.sh` for the demo scenarios. |
-| `switch/` | Agent instructions for the Switch room. |
+| `switch/` | Switch template and agent instructions for the incident room. |
 | `docs/` | Architecture diagram. |
 
 `Backend/rca_engine.py` and `Backend/dataset/production_issues_75.json` are the earlier, smaller engine. The API no longer uses them.
