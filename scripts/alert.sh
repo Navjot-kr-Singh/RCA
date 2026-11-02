@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Probe the local demo shop and, if checkout is failing, print an incident alert
-# ready to post in the incident channel.
+# Probe the local demo shop and, if checkout is failing, print an incident alert.
+# With ALERT_WEBHOOK_URL set to a Discord webhook, also post it to that channel.
 # Usage: scripts/alert.sh
 set -euo pipefail
 
@@ -19,10 +19,20 @@ if [ "$code" = "200" ]; then
   exit 0
 fi
 
-cat <<ALERT
-🚨 [ALERT] demo-shop: checkout is failing
+alert="🚨 [ALERT] demo-shop: checkout is failing
 time:     $(date -u +%Y-%m-%dT%H:%M:%SZ)
 service:  demo-shop ($SHOP_URL)
 check:    synthetic POST /checkout -> HTTP $code
-response: $body
-ALERT
+response: $body"
+echo "$alert"
+
+if [ -n "${ALERT_WEBHOOK_URL:-}" ]; then
+  case "$ALERT_WEBHOOK_URL" in
+    https://discord.com/api/webhooks/*) ;;
+    *) echo "Not sent: ALERT_WEBHOOK_URL must be a Discord webhook URL." >&2; exit 1 ;;
+  esac
+  # json.dumps escapes the quotes and newlines in the alert text.
+  payload=$(printf '%s' "$alert" | python3 -c 'import json, sys; print(json.dumps({"content": sys.stdin.read()}))')
+  curl -fsS -o /dev/null -X POST "$ALERT_WEBHOOK_URL" -H 'Content-Type: application/json' -d "$payload"
+  echo "Sent to Discord."
+fi
