@@ -21,7 +21,7 @@ See the [architecture diagram](docs/architecture.md).
 3. **Root cause.** The RCA Agent asks the RCA API, which searches 2,856 past incidents, and posts the top hypotheses with evidence IDs and source links.
 4. **Checks.** The Fixer runs read-only checks, pastes the exact output, and proposes one fix as an exact command.
 5. **Approval.** A person replies `@<team>-fixer approve`. Only then does the Fixer apply the fix, which verifies itself.
-6. **Learning loop.** The Triager writes the postmortem, and the resolved incident is added to the index so the next similar alert can cite it. *(Planned.)*
+6. **Learning loop.** The Triager writes the postmortem and posts the resolved incident to `POST /incidents`. It joins the index as `LOCAL-0001`, and the next similar alert cites it.
 
 ## Why Switch is central
 
@@ -29,19 +29,27 @@ Switch is where the agents and the people meet. Each agent acts only on messages
 
 ## Quickstart
 
-You need Python 3.9+ and an OpenAI API key for the RCA API.
+You need Python 3.9+. No OpenAI key is needed in demo mode.
 
-1. **Start the RCA API** on port 8000, as described in [Running it](#running-it) below.
-2. **Start the demo shop** on port 8001:
+1. **Set up** once, from the repository root:
 
    ```bash
-   cd demo-shop
-   python3 -m venv .venv
-   .venv/bin/pip install -r requirements.txt
-   .venv/bin/uvicorn main:app --host 127.0.0.1 --port 8001
+   scripts/setup.sh
    ```
 
-3. **Run the scenario** from the repository root, in a second terminal:
+2. **Start the RCA API** on port 8000. `RCA_DEMO_MODE=1` answers from cached live answers for the three demo scenarios; leave it out and put `OPENAI_API_KEY` in `Backend/.env` for live answers to any issue.
+
+   ```bash
+   cd Backend && RCA_DEMO_MODE=1 .venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+   ```
+
+3. **Start the demo shop** on port 8001, in a second terminal:
+
+   ```bash
+   cd demo-shop && ../Backend/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8001
+   ```
+
+4. **Run the scenario** from the repository root, in a third terminal:
 
    ```bash
    scripts/break.sh redis-oom   # checkout starts returning 503
@@ -49,9 +57,11 @@ You need Python 3.9+ and an OpenAI API key for the RCA API.
    scripts/fix.sh redis-oom     # restores the cache, then checks checkout and health
    ```
 
-4. **Agents.** In Switch Console, open **Templates**, paste [switch/oncall-room.template.yaml](switch/oncall-room.template.yaml), set **OnCall Room repo folder** to this repository's absolute path, and create. It adds the Triager, RCA Agent and Fixer to the `incidents` room, or creates a new room if there is none. Their instructions are also in [switch/agent-instructions.md](switch/agent-instructions.md).
+   With `ALERT_MENTION` set to the triager's mention (for example `ALERT_MENTION='<@&1234>'`), the posted alert addresses the triager. To find the mention, send `\@vertos-triager` in Discord and copy what appears.
 
-To run the demo shop's tests: `cd demo-shop && .venv/bin/python -m unittest tests.test_shop -v`.
+5. **Agents.** In Switch Console, open **Templates**, paste [switch/oncall-room.template.yaml](switch/oncall-room.template.yaml), set **OnCall Room repo folder** to this repository's absolute path, and create. It adds the Triager, RCA Agent and Fixer to the `incidents` room, or creates a new room if there is none. Their instructions are also in [switch/agent-instructions.md](switch/agent-instructions.md).
+
+Tests: `cd Backend && .venv/bin/python -m unittest tests.test_oncall tests.test_rag` and `cd demo-shop && ../Backend/.venv/bin/python -m unittest tests.test_shop`.
 
 ## Demo scenarios
 
@@ -69,7 +79,7 @@ In the Redis scenario, `break.sh` shrinks the shop's in-memory cache and sets th
 - **Read-only first.** The Fixer's only check is `GET /health`, which changes nothing.
 - **Sandbox only.** The demo shop listens on 127.0.0.1, and every script refuses to run unless `SHOP_URL` points at localhost. The shop's `/admin/cache/config` endpoint has no authentication; it exists only for the local sandbox and must never be exposed.
 - **Evidence.** The RCA API drops citations to incidents it did not retrieve, and the RCA Agent may cite only IDs from the API response.
-- **Secrets.** The OpenAI key lives in `Backend/.env`, which is gitignored, and the Discord webhook URL is read from the `ALERT_WEBHOOK_URL` environment variable. Neither is committed.
+- **Secrets.** The OpenAI key lives in `Backend/.env`, which is gitignored, and the Discord webhook URL is read from the `ALERT_WEBHOOK_URL` environment variable. Neither is committed. Demo mode needs no key at all.
 
 ## Technologies
 
@@ -108,6 +118,7 @@ Describe a production issue in plain words and get likely root causes, recommend
 | `scripts/` | `break.sh`, `fix.sh` and `alert.sh` for the demo scenarios. |
 | `switch/` | Switch template and agent instructions for the incident room. |
 | `docs/` | Architecture diagram. |
+| `LICENSE` | MIT, for the code. |
 
 `Backend/rca_engine.py` and `Backend/dataset/production_issues_75.json` are the earlier, smaller engine. The API no longer uses them.
 
@@ -161,7 +172,17 @@ Open http://127.0.0.1:5173. The app expects the API at `http://127.0.0.1:8000`; 
 }
 ```
 
-`root_causes`, `solutions`, `confidence`, `explanation` and `similar_issues` are the simpler fields the analysis app reads. An answer takes roughly 6 to 9 seconds. `GET /` reports how many incidents are indexed. Interactive docs are at http://127.0.0.1:8000/docs.
+`root_causes`, `solutions`, `confidence`, `explanation` and `similar_issues` are the simpler fields the analysis app reads. `summary_markdown` is the same answer as short Markdown for a chat message; the RCA Agent posts it as is. A live answer takes roughly 6 to 9 seconds. `GET /` reports how many incidents are indexed and whether demo mode is on. Interactive docs are at http://127.0.0.1:8000/docs.
+
+`POST /incidents` adds a resolved incident to the index (the learning loop):
+
+```json
+{ "issue": "...", "root_cause": "...", "solution": "...", "category": "database_issue", "severity": "Critical" }
+```
+
+It returns `{"id": "LOCAL-0001", "embedded": true, "incidents_indexed": 2857}`. Incidents are kept in `Backend/data/learned_incidents.json` (gitignored) and re-indexed on every start. In demo mode they are found by keyword search only, and shown first among the similar incidents.
+
+**Demo mode.** With `RCA_DEMO_MODE=1`, `/analyze` answers from `Backend/demo/cache.json`, one live answer per demo scenario, picked by the words the issue shares with each. An issue that matches none gets a 404 listing the cached ones. Rebuild the cache with `cd Backend && .venv/bin/python -m rag.demo_cache` (needs a key).
 
 ### Datasets
 

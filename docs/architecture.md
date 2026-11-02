@@ -21,7 +21,7 @@ flowchart TB
     fixer -->|"GET /health, read-only"| shop["Sandbox demo shop :8001<br/>FakeRedis cache"]
     fixer -->|"only after approve:<br/>scripts/fix.sh redis-oom"| shop
     breaksh["scripts/break.sh redis-oom"] -.->|"controlled failure"| shop
-    triager -->|"postmortem"| learn["Learning loop<br/>POST /incidents, planned"]
+    triager -->|"postmortem"| learn["Learning loop<br/>POST /incidents"]
     learn -.->|"resolved incident joins the index"| api
 ```
 
@@ -32,7 +32,7 @@ flowchart TB
 3. **Root cause.** The RCA Agent calls `POST /analyze`, which searches 2,856 past production incidents. It posts the top hypotheses with evidence IDs and source links, then hands `first_checks` to the Fixer.
 4. **Checks.** The Fixer runs read-only checks against the sandbox shop, pastes the exact output, and proposes one fix as an exact command.
 5. **Approval.** Nothing changes until a human in the room replies "approve". Only then does the Fixer run `scripts/fix.sh redis-oom`, which re-checks checkout and health.
-6. **Learning loop.** The Triager writes the postmortem and records the decision. The resolved incident is added to the RCA index, so the next similar alert can cite it. *(Planned.)*
+6. **Learning loop.** The Triager writes the postmortem and posts the resolved incident to `POST /incidents`. It joins the RCA index as a `LOCAL-` incident, so the next similar alert can cite it.
 
 ## Components
 
