@@ -1,7 +1,7 @@
 """Sandbox demo shop: a tiny checkout service backed by a fake Redis.
 
 Run from this folder:
-    .venv/bin/uvicorn main:app --host 127.0.0.1 --port 8001
+    ../Backend/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8001
 """
 import logging
 import os

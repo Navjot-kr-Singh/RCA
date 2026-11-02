@@ -10,6 +10,6 @@ esac
 
 if ! curl -s -o /dev/null "$SHOP_URL/health"; then
   echo "Demo shop is not reachable at $SHOP_URL. Start it first:" >&2
-  echo "  cd demo-shop && .venv/bin/uvicorn main:app --host 127.0.0.1 --port 8001" >&2
+  echo "  cd demo-shop && ../Backend/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8001" >&2
   exit 1
 fi
