@@ -8,3 +8,6 @@ dist/
 
 # Raw scraped pages the gold dataset was extracted from (~330 MB), too large to publish
 dataset/build/raw/
+
+# Incidents added through POST /incidents (learning loop); runtime data
+Backend/data/learned_incidents.json

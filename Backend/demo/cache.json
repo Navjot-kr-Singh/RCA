@@ -1,0 +1,525 @@
+[
+ {
+  "issue": "demo-shop checkout returns HTTP 503 cache_unavailable: Redis OOM command not allowed when used memory > 'maxmemory'",
+  "response": {
+   "mode": "RAG",
+   "analysis": {
+    "summary": "The demo-shop checkout service returns HTTP 503 errors due to Redis running out of memory and rejecting commands when memory usage exceeds the configured maxmemory limit.",
+    "category": "database_issue",
+    "category_confidence": 0.9,
+    "severity": "High",
+    "severity_confidence": 0.7,
+    "hypotheses": [
+     {
+      "cause": "Redis instance used for caching ran out of memory due to excessive data or missing eviction of expired keys, causing command rejections and service unavailability.",
+      "likelihood": 0.7,
+      "evidence_ids": [
+       "GOLD-0621",
+       "GOLD-1203",
+       "GOLD-0715"
+      ],
+      "reasoning": "Similar past incidents show Redis OOM errors caused by memory exhaustion from missing eviction or excessive data, leading to service degradation or outages."
+     },
+     {
+      "cause": "A recent deployment introduced a high-memory-consuming operation or bug that caused Redis memory usage to spike beyond maxmemory limits.",
+      "likelihood": 0.2,
+      "evidence_ids": [
+       "GOLD-1375",
+       "GOLD-0715"
+      ],
+      "reasoning": "Past incidents indicate that deployments causing increased Redis load or traffic can lead to memory pressure and failures."
+     },
+     {
+      "cause": "Redis instance configuration for maxmemory or eviction policy is misconfigured or insufficient for current workload, causing OOM errors under normal load.",
+      "likelihood": 0.1,
+      "evidence_ids": [
+       "GOLD-1203"
+      ],
+      "reasoning": "Misconfiguration or insufficient resource allocation can cause Redis to reject commands when memory limits are reached."
+     }
+    ],
+    "first_checks": [
+     "Check Redis memory usage and maxmemory configuration to confirm current memory pressure and limits.",
+     "Review Redis eviction policy and key expiration metrics to verify if keys are being evicted properly.",
+     "Inspect recent deployment logs and code changes for any modifications affecting Redis usage or caching behavior.",
+     "Check Redis logs for OOM errors and command rejections to correlate with incident timestamps.",
+     "Verify if Redis automatic restart or failover mechanisms are enabled and functioning."
+    ],
+    "fix_steps": [
+     "Increase Redis maxmemory limit or scale Redis instance vertically to handle current workload.",
+     "Fix or rollback any recent deployment changes that increased Redis memory usage excessively.",
+     "Implement or tune Redis eviction policies to ensure expired or unnecessary keys are removed timely.",
+     "Enable monitoring and alerting on Redis memory usage and OOM events to detect issues early.",
+     "Configure automatic Redis restarts or failover to recover from OOM conditions without manual intervention."
+    ],
+    "novel": false
+   },
+   "baseline": {
+    "category": "database_issue",
+    "category_distribution": {
+     "configuration_deployment": 0.156,
+     "database_issue": 0.844
+    },
+    "severity": "Medium",
+    "severity_distribution": {
+     "Low": 0.19,
+     "Medium": 0.405,
+     "High": 0.167,
+     "Critical": 0.238
+    }
+   },
+   "similar_incidents": [
+    {
+     "id": "GOLD-0621",
+     "org": "yasoon",
+     "category": "database_issue",
+     "severity": "Critical",
+     "issue": "Server outtage. 🙅‍♀️ Fault Once the mentioned code was deployed to our application servers, it slowly increased the used memory of the Redis instance over a period of three weeks.",
+     "root_cause": "We immediately started investigating the issue and found that our main Redis instance, which handles asynchronous job processing and caching, had run out of available memory, and therefore all calls to Redis were failing.",
+     "solution": "The review of the code, we failed to notice a missing flag in our Redis queueing code, which removed completed jobs from Redis. After ~20 minutes AWS was able to provision the resized instance, which restored our API availability.",
+     "source_url": "https://status.yasoon.com/incidents/qf0378tbk81x",
+     "incident_date": "2022-11-27",
+     "scores": {
+      "relevance": 10,
+      "cosine": 0.5469,
+      "rrf": 0.032,
+      "dense_rank": 1,
+      "bm25_rank": 4
+     }
+    },
+    {
+     "id": "GOLD-1203",
+     "org": "signageOS",
+     "category": "database_issue",
+     "severity": "Medium",
+     "issue": "Temporary system degradation caused by Redis cache. Temporary unavailability of the API, Box, and Platform services.",
+     "root_cause": "Date 2025-04-12 Authors Václav Boch, DevOps Engineer Summary System degradation of multiple services due to a Redis database crash.",
+     "solution": "Trigger A Redis instance designated as a cache ran out of memory and was rotated. Unfortunately, automatic restarts were disabled in SystemD for this scenario, requiring manual intervention from a system administrator.",
+     "source_url": "https://signageos1.statuspage.io/incidents/f541mn2zrw85",
+     "incident_date": "2025-04-02",
+     "scores": {
+      "relevance": 9,
+      "cosine": 0.5252,
+      "rrf": 0.0308,
+      "dense_rank": 2,
+      "bm25_rank": 8
+     }
+    },
+    {
+     "id": "GOLD-1375",
+     "org": "signageOS",
+     "category": "database_issue",
+     "severity": "Medium",
+     "issue": "Unexpected high error rate. Date: 2025-07-24 Authors: DevOps Team Summary On July 24th, 2025, the signageOS platform experienced temporary service degradation due to high load on the Redis instance used by certain environments.",
+     "root_cause": "A change deployed to the experimental API environment introduced a high-cost operation that impacted the responsiveness of Redis, leading to delayed processing across affected systems.",
+     "solution": "The issue was mitigated by reverting the deployment. The deployment was rolled back, immediately restoring stability.",
+     "source_url": "https://signageos1.statuspage.io/incidents/pc1gnjj1vqdk",
+     "incident_date": "2025-07-24",
+     "scores": {
+      "relevance": 8,
+      "cosine": 0.4652,
+      "rrf": 0.0265,
+      "dense_rank": 15,
+      "bm25_rank": 16
+     }
+    },
+    {
+     "id": "GOLD-0715",
+     "org": "Gemfury",
+     "category": "configuration_deployment",
+     "severity": "Low",
+     "issue": "Partial service failure due to non-volatile Redis saturation. However, the utilization of our non-volatile Redis, which usually hovers below 5%, slowly started to increase.",
+     "root_cause": "Earlier today, we deployed a bug that exposed a legacy system to excessive traffic, overwhelming our core Redis instance and causing cascading failures in certain functionality.",
+     "solution": "Engineering quickly identified the issue and cleared excess data from Redis, restoring service. May 29th, - Fix deployed to remove the tracking bug We deployed a fix to remove the tracking bug.",
+     "source_url": "https://status.fury.co/incidents/pqwknx0p4n4n",
+     "incident_date": "2023-06-29",
+     "scores": {
+      "relevance": 8,
+      "cosine": 0.5088,
+      "rrf": 0.0156,
+      "dense_rank": 4
+     }
+    },
+    {
+     "id": "GOLD-1325",
+     "org": "Entitle",
+     "category": "database_issue",
+     "severity": "High",
+     "issue": "Entitle US Region down time. The downstream Node.js services attempted to reconnect continuously, leading to: Redis connection timeouts Pub/Sub disconnections (EOF) Memory pressure due to too many event listeners This condition persisted until the pod was forcefully deleted, which reset the backoff and allowed Redis to start cleanly.",
+     "root_cause": "This caused cascading issues in dependent services, including elevated Redis client errors, Pub/Sub disconnections, and connection retry exhaustion.",
+     "solution": "The issue was resolved by performing a manual hard reset of the Redis pod.",
+     "source_url": "https://status.entitle.io/incidents/bm4zbcc1mqj4",
+     "incident_date": "2025-06-16",
+     "scores": {
+      "relevance": 7,
+      "cosine": 0.4539,
+      "rrf": 0.0282,
+      "dense_rank": 23,
+      "bm25_rank": 2
+     }
+    }
+   ],
+   "validation": {
+    "dropped_citations": [],
+    "hypotheses_truncated": 0
+   },
+   "timing_s": {
+    "retrieve": 6.9,
+    "total": 11.66
+   },
+   "models": {
+    "llm": "gpt-4.1-mini",
+    "embed": "text-embedding-3-small",
+    "index": "full",
+    "rerank": true
+   }
+  }
+ },
+ {
+  "issue": "Checkout requests are slow and time out; database connection pool exhausted, timeout waiting for a connection from the pool",
+  "response": {
+   "mode": "RAG",
+   "analysis": {
+    "summary": "Checkout requests are slow and timing out due to exhaustion of the database connection pool.",
+    "category": "database_issue",
+    "category_confidence": 0.85,
+    "severity": "High",
+    "severity_confidence": 0.7,
+    "hypotheses": [
+     {
+      "cause": "Database connection pool exhaustion caused by high traffic and inefficient query patterns leading to saturation of available connections.",
+      "likelihood": 0.6,
+      "evidence_ids": [
+       "GOLD-0127",
+       "GOLD-0126"
+      ],
+      "reasoning": "Similar incidents at GitHub and Stripe involved connection pool saturation due to high traffic and inefficient queries causing request timeouts and slowdowns."
+     },
+     {
+      "cause": "A recent deployment introduced a bug causing database connections not to be returned to the pool, leading to connection starvation and timeouts.",
+      "likelihood": 0.3,
+      "evidence_ids": [
+       "GOLD-1350"
+      ],
+      "reasoning": "A past critical incident involved a deployment mistake causing connection pool starvation and API downtime, which could explain the current symptoms if a recent deploy occurred."
+     },
+     {
+      "cause": "Increased client retries amplifying load on the database connection pool, worsening saturation and causing timeouts.",
+      "likelihood": 0.1,
+      "evidence_ids": [
+       "GOLD-0126"
+      ],
+      "reasoning": "Stripe incident showed client retries can amplify load on an already saturated connection pool, contributing to timeouts."
+     }
+    ],
+    "first_checks": [
+     "Check current database connection pool usage and saturation metrics.",
+     "Review recent deployment logs for changes affecting database connection handling.",
+     "Analyze query patterns and slow query logs to identify inefficient queries causing connection retention.",
+     "Monitor client retry rates to detect amplification loops.",
+     "Check application logs for errors related to database connection acquisition timeouts."
+    ],
+    "fix_steps": [
+     "If a recent deployment caused the issue, roll back to the last known good version.",
+     "Optimize database queries and indexes to reduce connection hold times.",
+     "Increase database connection pool size temporarily to relieve pressure.",
+     "Implement rate limiting or circuit breakers on client retries to prevent amplification.",
+     "Monitor connection pool metrics continuously and alert on saturation thresholds."
+    ],
+    "novel": false
+   },
+   "baseline": {
+    "category": "database_issue",
+    "category_distribution": {
+     "configuration_deployment": 0.155,
+     "database_issue": 0.593,
+     "api_latency": 0.252
+    },
+    "severity": "High",
+    "severity_distribution": {
+     "Low": 0.37,
+     "High": 0.435,
+     "Critical": 0.196
+    }
+   },
+   "similar_incidents": [
+    {
+     "id": "GOLD-0127",
+     "org": "GitHub",
+     "category": "database_issue",
+     "severity": "High",
+     "issue": "GitHub services went offline multiple times due to database connection pool saturation.",
+     "root_cause": "High traffic combined with an inefficient query pattern on the shared mysql1 database cluster exhausted ProxySQL connection limits.",
+     "solution": "Optimized database index queries and added proactive connection rate-limiting for backend API requests.",
+     "source_url": "https://github.blog/2022-03-23-an-update-on-recent-service-disruptions/",
+     "incident_date": "2022-03-23",
+     "scores": {
+      "relevance": 10,
+      "cosine": 0.5589,
+      "rrf": 0.0328,
+      "dense_rank": 1,
+      "bm25_rank": 1
+     }
+    },
+    {
+     "id": "GOLD-0126",
+     "org": "Stripe",
+     "category": "api_latency",
+     "severity": "High",
+     "issue": "Payment API median response time jumps from ~120ms to multiple seconds, checkouts stalling for many customers at once.",
+     "root_cause": "A metadata write path used during payment creation saturated a database cluster after a traffic increase combined with a reduced number of available connections in the connection pool. As requests queued, client-side retries added further load to the same overloaded pool, amplifying the slowdown across thousands of integrated platforms.",
+     "solution": "Reporting suggests recovery involved relieving the connection pool bottleneck and separating client retry traffic from core request queues to prevent the same amplification loop in future incidents.",
+     "source_url": "https://medium.com/@warstories/the-stripe-latency-post-mortem-every-engineer-should-read-before-launching-their-api-6514411772f8",
+     "incident_date": "2022-03",
+     "scores": {
+      "relevance": 10,
+      "cosine": 0.5381,
+      "rrf": 0.0315,
+      "dense_rank": 2,
+      "bm25_rank": 5
+     }
+    },
+    {
+     "id": "GOLD-1350",
+     "org": "Teleport",
+     "category": "configuration_deployment",
+     "severity": "Critical",
+     "issue": "API down. This resulted in connection starvation for new requests, resulting in timeouts and 5XX responses starting at 13:59Z.",
+     "root_cause": "This afternoon a deploy introduced a mistake that caused database connections of a specific route not to be returned to the pool.",
+     "solution": "We have rolled back and the API became available again at 14:09Z.",
+     "source_url": "https://teleport.statuspage.io/incidents/jsq71zkq07p8",
+     "incident_date": "2025-07-04",
+     "scores": {
+      "relevance": 9,
+      "cosine": 0.4571,
+      "rrf": 0.0272,
+      "dense_rank": 23,
+      "bm25_rank": 6
+     }
+    },
+    {
+     "id": "GOLD-2716",
+     "org": "Socure",
+     "category": "database_issue",
+     "severity": "Low",
+     "issue": "SEV3 Impact on DocV and Watchlist monitoring events. During the incident window ( to of 8-Sep-2026), some of the client requests experienced elevated error rates when attempting to query account details.",
+     "root_cause": "During a scheduled system update, elevated connection retention between deployment environments led to database connection pool saturation.",
+     "solution": "Full service integrity was restored through the following immediate actions.",
+     "source_url": "https://status.socure.com/incidents/w83vbhy7fmm9",
+     "incident_date": "2026-09-08",
+     "scores": {
+      "relevance": 9,
+      "cosine": 0.3094,
+      "rrf": 0.0149,
+      "bm25_rank": 7
+     }
+    },
+    {
+     "id": "GOLD-2367",
+     "org": "Alpaca",
+     "category": "database_issue",
+     "severity": "Low",
+     "issue": "Elevated Order Request Timeouts.",
+     "root_cause": "ET, a subset of order requests experienced elevated timeouts due to temporary database connectivity issues caused by increased connection pressure.",
+     "solution": "Our engineering team has restored normal service and is continuing to monitor the platform to ensure ongoing stability.",
+     "source_url": "https://status.alpaca.markets/incidents/cfkq0205dv3r",
+     "incident_date": "2026-06-27",
+     "scores": {
+      "relevance": 8,
+      "cosine": 0.5343,
+      "rrf": 0.028,
+      "dense_rank": 4,
+      "bm25_rank": 21
+     }
+    }
+   ],
+   "validation": {
+    "dropped_citations": [],
+    "hypotheses_truncated": 0
+   },
+   "timing_s": {
+    "retrieve": 5.56,
+    "total": 9.82
+   },
+   "models": {
+    "llm": "gpt-4.1-mini",
+    "embed": "text-embedding-3-small",
+    "index": "full",
+    "rerank": true
+   }
+  }
+ },
+ {
+  "issue": "Checkout fails right after a deploy; service config has a typo and the app cannot read its settings, errors started with the new release",
+  "response": {
+   "mode": "RAG",
+   "analysis": {
+    "summary": "Checkout fails immediately after deployment due to a typo in service configuration preventing the app from reading its settings.",
+    "category": "configuration_deployment",
+    "category_confidence": 0.55,
+    "severity": "High",
+    "severity_confidence": 0.6,
+    "hypotheses": [
+     {
+      "cause": "Typo in service configuration file causing the application to fail reading critical settings after deployment",
+      "likelihood": 0.7,
+      "evidence_ids": [
+       "GOLD-0104",
+       "GOLD-1821",
+       "GOLD-0053"
+      ],
+      "reasoning": "Similar incidents involved configuration deployment errors causing checkout failures or application startup issues immediately after deploys."
+     },
+     {
+      "cause": "Incomplete propagation of configuration changes leading to inconsistent application behavior",
+      "likelihood": 0.2,
+      "evidence_ids": [
+       "GOLD-0053"
+      ],
+      "reasoning": "Past incident showed partial propagation of config changes caused failures in starting web dynos, which could manifest as errors after deploy."
+     },
+     {
+      "cause": "Regression in application code triggered by new configuration values causing checkout failures",
+      "likelihood": 0.1,
+      "evidence_ids": [
+       "GOLD-1973"
+      ],
+      "reasoning": "A past critical incident involved a regression causing checkout degradation after a patch, though current report points more to config typo."
+     }
+    ],
+    "first_checks": [
+     "Verify the deployed configuration files for typos or syntax errors",
+     "Check application logs for errors related to configuration loading or missing settings",
+     "Confirm that the deployment process completed successfully and the new configuration was applied",
+     "Test the checkout service functionality in a staging environment with the same configuration",
+     "Check for any recent changes in deployment scripts or configuration management tools"
+    ],
+    "fix_steps": [
+     "Correct the typo in the service configuration file and redeploy",
+     "Add validation checks for configuration files before deployment to catch syntax errors",
+     "Implement automated tests to verify configuration loading during deployment",
+     "Enhance deployment monitoring to confirm configuration is correctly applied",
+     "Communicate with the deployment and development teams to review and improve deployment procedures"
+    ],
+    "novel": false
+   },
+   "baseline": {
+    "category": "configuration_deployment",
+    "category_distribution": {
+     "configuration_deployment": 0.551,
+     "database_issue": 0.205,
+     "other": 0.245
+    },
+    "severity": "Medium",
+    "severity_distribution": {
+     "Low": 0.231,
+     "Medium": 0.385,
+     "High": 0.205,
+     "Critical": 0.179
+    }
+   },
+   "similar_incidents": [
+    {
+     "id": "GOLD-0104",
+     "org": "Heroku",
+     "category": "configuration_deployment",
+     "severity": "Low",
+     "issue": "Git push heroku main' silently fails to deploy new code even though the push itself succeeds.",
+     "root_cause": "An incorrect deployment process meant that newly introduced configuration variables were not actually being used by the running application, so code that depended on those variables behaved as if they were never set, even though the push and build steps reported success.",
+     "solution": "Corrected the deployment process so new configuration variables are properly picked up and used at runtime, and added a way to verify that a deploy is actually using the intended configuration rather than just checking build/push success.",
+     "source_url": "https://blog.heroku.com/how-i-broke-git-push-heroku-main",
+     "incident_date": "2021",
+     "scores": {
+      "relevance": 9,
+      "cosine": 0.4436,
+      "rrf": 0.0293,
+      "dense_rank": 13,
+      "bm25_rank": 4
+     }
+    },
+    {
+     "id": "GOLD-1821",
+     "org": "Vtex",
+     "category": "configuration_deployment",
+     "severity": "High",
+     "issue": "Checkout Service Degradation. Summary a subset of customers experienced checkout errors.",
+     "root_cause": "This incident was caused by an internal deployment issue that temporarily affected checkout service behavior.",
+     "solution": "The situation was mitigated through manual intervention, restoring normal service levels.",
+     "source_url": "https://status.vtex.com/incidents/01KG5SRM9TJ4CWTBP187SPRCY6",
+     "incident_date": "2026-01-29",
+     "scores": {
+      "relevance": 8,
+      "cosine": 0.3374,
+      "rrf": 0.0159,
+      "bm25_rank": 3
+     }
+    },
+    {
+     "id": "GOLD-2273",
+     "org": "ActiveProspect",
+     "category": "other",
+     "severity": "Medium",
+     "issue": "ActiveProspect Application Access Issue.",
+     "root_cause": "Today, users experienced issues accessing the ActiveProspect application due to an application configuration error.",
+     "solution": "The issue was identified and corrected, and service has been fully restored.",
+     "source_url": "https://status.activeprospect.com/incidents/bvz3b6cc4x4k",
+     "incident_date": "2026-06-09",
+     "scores": {
+      "relevance": 8,
+      "cosine": 0.3209,
+      "rrf": 0.0145,
+      "bm25_rank": 9
+     }
+    },
+    {
+     "id": "GOLD-0053",
+     "org": "Heroku",
+     "category": "configuration_deployment",
+     "severity": "Medium",
+     "issue": "Web dynos fail to start after a routine remote configuration change, application deploys stuck.",
+     "root_cause": "An automated remote configuration change did not fully propagate to all the systems responsible for starting web dynos, leaving some of them working from stale configuration and unable to start new dynos correctly.",
+     "solution": "Manually verified and re-propagated the configuration to all affected systems, and added a completion check to confirm remote configuration changes have actually reached every target system before considering the change complete.",
+     "source_url": "https://status.heroku.com/incidents/1091",
+     "incident_date": "2016",
+     "scores": {
+      "relevance": 7,
+      "cosine": 0.6021,
+      "rrf": 0.0164,
+      "dense_rank": 1
+     }
+    },
+    {
+     "id": "GOLD-1973",
+     "org": "Alpine IQ",
+     "category": "database_issue",
+     "severity": "Critical",
+     "issue": "Checkout Page degredation.",
+     "root_cause": "A security patch deployed to the menu service introduced a regression that caused menus to load without certain store configuration settings.",
+     "solution": "The issue was identified and resolved by rolling back the affected code.",
+     "source_url": "https://status.alpineiq.com/incidents/2btdd6qpz6x5",
+     "incident_date": "2026-03-13",
+     "scores": {
+      "relevance": 7,
+      "cosine": 0.2673,
+      "rrf": 0.0154,
+      "bm25_rank": 5
+     }
+    }
+   ],
+   "validation": {
+    "dropped_citations": [],
+    "hypotheses_truncated": 0
+   },
+   "timing_s": {
+    "retrieve": 5.09,
+    "total": 9.29
+   },
+   "models": {
+    "llm": "gpt-4.1-mini",
+    "embed": "text-embedding-3-small",
+    "index": "full",
+    "rerank": true
+   }
+  }
+ }
+]

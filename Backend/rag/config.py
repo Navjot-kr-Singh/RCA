@@ -33,6 +33,13 @@ LLM_REASONING = os.getenv("RCA_LLM_REASONING", "none" if LLM_BASE_URL else "") o
 # 8B model it doubles latency and scores candidates poorly.
 RERANK = os.getenv("RCA_RERANK", "0" if LLM_BASE_URL else "1") == "1"
 
+# Demo mode answers /analyze from cached responses, so the API runs without an
+# OpenAI key. Build the cache with `python -m rag.demo_cache` (needs a key).
+DEMO_MODE = os.getenv("RCA_DEMO_MODE", "0") == "1"
+DEMO_CACHE_PATH = BACKEND_DIR / "demo" / "cache.json"
+# Incidents resolved in the incident room (POST /incidents), kept across restarts.
+LEARNED_PATH = Path(os.getenv("RCA_LEARNED_PATH", DATA_DIR / "learned_incidents.json"))
+
 CATEGORIES = [
     "configuration_deployment",
     "database_issue",

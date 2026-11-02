@@ -53,12 +53,24 @@ class KnowledgeBase:
         self.manifest = json.loads((path / "manifest.json").read_text())
         self.docs = json.loads((path / "docs.json").read_text())
         self.index = faiss.read_index(str(path / "dense.faiss"))
+        self._rebuild()
+
+    def _rebuild(self):
         self.by_id = {d["id"]: i for i, d in enumerate(self.docs)}
         # Lexical side indexes the cause too, so terms like "terraform" or
         # "certificate" in a user's description can match a past mechanism.
         self.bm25 = BM25([d["issue"] + " " + d["root_cause"] for d in self.docs])
         counts = Counter(d["category"] for d in self.docs)
         self.category_prior = {c: n / len(self.docs) for c, n in counts.items()}
+
+    def add(self, doc, vector):
+        """Append one incident in memory. `vector` must be unit length, or zeros
+        when no embedding is available (the incident is then found by BM25 only)."""
+        if doc["id"] in self.by_id:
+            raise ValueError(f"{doc['id']} is already indexed")
+        self.index.add(np.asarray(vector, dtype="float32").reshape(1, -1))
+        self.docs.append(doc)
+        self._rebuild()
 
     def dense_search(self, query_vector, k):
         scores, rows = self.index.search(query_vector.reshape(1, -1).astype("float32"), k)

@@ -37,6 +37,17 @@ passing verification, write a short postmortem in the room: a timeline with
 UTC times, the root cause, the evidence IDs the RCA agent cited, the fix, and
 follow-ups. Use only facts posted in this room, and write "unknown" for
 anything nobody posted.
+
+After the postmortem, add the incident to the RCA index so the next similar
+alert can cite it. Write incident.json in your directory with your file tool:
+  {"issue": "<one-line symptom with the exact error text>",
+   "root_cause": "<root cause as written in the postmortem>",
+   "solution": "<the fix that was applied>",
+   "category": "<your category>", "severity": "<your severity>"}
+then run:
+  curl -s -X POST http://127.0.0.1:8000/incidents \
+    -H 'Content-Type: application/json' --data-binary @incident.json
+Post the id it returns (LOCAL-...). If the call fails, post the exact error.
 ```
 
 ## RCA Agent
@@ -57,17 +68,15 @@ When @{team}-triager hands you a symptom:
    contains quotes that change or break the request.
 3. If the call fails or returns something other than JSON, post the exact
    error and stop. Never write an analysis the API did not return.
-4. Reply in the same thread with:
-   - mode: RAG or LLM_ONLY. If LLM_ONLY, start with: "No similar past
-     incident was found; these hypotheses are model reasoning only."
-   - severity and category from the API, and whether they differ from the
-     triager's.
-   - up to 3 hypotheses from analysis.hypotheses, each with its likelihood
-     and evidence_ids.
-   - the most similar past incident from similar_incidents: its id, org and
-     source_url.
-   - first_checks as a numbered list.
-5. Hand first_checks and the top hypothesis to @{team}-fixer.
+4. Reply in the same thread with the summary_markdown field of the response,
+   unchanged. It already has the mode, category, severity, hypotheses with
+   evidence IDs, the closest past incident with its link, and first_checks.
+   Below it, add one line saying whether the API's severity and category
+   differ from the triager's.
+5. If any id in similar_incidents starts with LOCAL-, say: "This team has
+   resolved a similar incident before: <id>", with its root_cause and
+   solution from the response.
+6. Hand first_checks and the top hypothesis to @{team}-fixer.
 
 Evidence rules:
 - Cite only ids that appear in this API response, in
