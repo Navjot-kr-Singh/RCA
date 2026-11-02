@@ -6,6 +6,7 @@ Run from this folder:
 import logging
 import os
 import uuid
+from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -29,8 +30,8 @@ class CheckoutRequest(BaseModel):
 
 
 class CacheConfig(BaseModel):
-    max_keys: int | None = None
-    policy: str | None = None
+    max_keys: Optional[int] = None
+    policy: Optional[str] = None
 
 
 def cache_rejects_writes():

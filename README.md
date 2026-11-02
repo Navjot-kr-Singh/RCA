@@ -29,7 +29,7 @@ Switch is where the agents and the people meet. Each agent acts only on messages
 
 ## Quickstart
 
-You need Python 3.10+ and an OpenAI API key for the RCA API.
+You need Python 3.9+ and an OpenAI API key for the RCA API.
 
 1. **Start the RCA API** on port 8000, as described in [Running it](#running-it) below.
 2. **Start the demo shop** on port 8001:
