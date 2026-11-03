@@ -61,9 +61,35 @@ You need Python 3.9+. No OpenAI key is needed in demo mode.
 
    With `ALERT_MENTION` set to the triager's mention (for example `ALERT_MENTION='<@&1234>'`), the posted alert addresses the triager. To find the mention, send `\@vertos-triager` in Discord and copy what appears.
 
-5. **Agents.** In Switch Console, open **Templates**, paste [switch/oncall-room.template.yaml](switch/oncall-room.template.yaml), set **OnCall Room repo folder** to this repository's absolute path, and create. It adds the Triager, RCA Agent and Fixer to the `incidents` room, or creates a new room if there is none. Their instructions are also in [switch/agent-instructions.md](switch/agent-instructions.md).
+5. **Agents.** First connect Switch to Discord (see [Connect Discord to Switch](#connect-discord-to-switch)). Then, in Switch Console, open **Templates**, paste [switch/oncall-room.template.yaml](switch/oncall-room.template.yaml), set **OnCall Room repo folder** to this repository's absolute path, and create. It adds the Triager, RCA Agent and Fixer to the `incidents` room, or creates a new room if there is none. Their instructions are also in [switch/agent-instructions.md](switch/agent-instructions.md).
 
 Tests: `cd Backend && .venv/bin/python -m unittest tests.test_oncall tests.test_rag` and `cd demo-shop && ../Backend/.venv/bin/python -m unittest tests.test_shop`.
+
+## Connect Discord to Switch
+
+This takes about 20 minutes, and you do it once. We used Switch Console v0.40.1 on macOS, with no Docker.
+
+**1. Run a Switch server.** Install [Switch Console](https://github.com/sandbox-quantum/switch/releases/latest), then go to **Add a server** → **Run a server on this computer**. Leave **Also run Mattermost** off, since Mattermost needs Docker and you are using Discord. In **Settings → Agent providers**, check that **Claude Code** shows as installed.
+
+**2. Create the Discord server and channel.** Create a Discord server with an `#incidents` channel, and invite your teammates.
+
+**3. Create a bot** in the [Discord Developer Portal](https://discord.com/developers/applications):
+- Go to **New Application** → **Bot**, then press **Reset Token** and copy the token. Treat the token as a password and never commit it.
+- On the same page, turn on **Server Members Intent** and **Message Content Intent**, then press **Save Changes**. If Message Content Intent is off, the bot can't read the messages that mention the agents.
+- In **OAuth2 → URL Generator**, select the `bot` and `applications.commands` scopes, then these permissions: View Channels, Send Messages, Send Messages in Threads, Manage Webhooks, Manage Channels, Manage Roles, Read Message History, Attach Files. This is permissions integer `275683314704`. Set **Integration Type** to Guild Install.
+- Open the generated URL, choose your server, and authorize.
+
+> **Gotcha:** if the server list in that dialog is empty, your account can't add bots to the server. The server owner, or someone with Manage Server, must open the URL instead.
+
+**4. Copy the server ID.** In Discord, go to **Settings → Advanced** and turn on **Developer Mode**, then right-click the server icon and choose **Copy Server ID**.
+
+**5. Connect the bot in Switch Console.** Go to **Home → Messaging apps → Connect → Discord** and fill in a name, the **Bot Token** and the **Guild Id** (the server ID). Then press **Connect**, find your own Discord account and press **This is me**.
+
+**6. Check the connection.** Send `hello` in `#incidents`. A room called `incidents` should appear under **Your Rooms**. Now create the agents (Quickstart step 5).
+
+**7. Automatic alerts (optional).** In `#incidents`, open **Edit Channel → Integrations → Webhooks → New Webhook**, copy the URL, and export it as `ALERT_WEBHOOK_URL` before you run `scripts/alert.sh`. Keep the URL out of the repository.
+
+Each agent becomes a Discord role, so a mention looks like `<@&id>`. To address an agent, type `@vertos-triager` and choose it from the list. The agents reply in a thread under the message that mentions them.
 
 ## Demo scenarios
 
