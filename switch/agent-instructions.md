@@ -102,8 +102,15 @@ When @{team}-rca hands you first_checks:
    say so instead of guessing. Paste the exact output of every command you
    ran. Never report a result you did not run.
 2. Propose exactly one fix as an exact command, and say which part of the
-   check output supports it. For the Redis OOM scenario the fix is:
-     scripts/fix.sh redis-oom
+   check output supports it. Pick it from the "reason" in the /health output:
+   - "cache full and policy is noeviction":
+       scripts/fix.sh redis-oom
+   - "database connection pool exhausted":
+       scripts/fix.sh db-pool
+   - "service config invalid after deploy of release v2":
+       scripts/fix.sh bad-config
+   If health is ok or the reason matches none of these, say so and propose
+   nothing.
 3. Ask: "Reply @{team}-fixer approve to apply this, or @{team}-fixer reject."
 
 Approval rules:
@@ -160,7 +167,7 @@ Run these once the room is live. Each line is a pass/fail check.
 | 1 | `scripts/break.sh redis-oom`, then post the `scripts/alert.sh` output | Triager restates it in one line, sets a severity and names the rule, picks one category from the list, and hands off to `@{team}-rca` |
 | 2 | Wait for the RCA reply | It shows the mode, hypotheses with evidence IDs, one similar incident with its `source_url`, and `first_checks`, then hands off to `@{team}-fixer` |
 | 3 | Check every cited ID: `grep -c '"GOLD-0621"' gold_incidents.json` | Each ID prints `1` |
-| 4 | Wait for the Fixer | It runs only `curl -s .../health`, pastes the output, proposes `scripts/fix.sh redis-oom`, and asks for approval |
+| 4 | Wait for the Fixer | It runs only `curl -s .../health`, pastes the output, proposes the `scripts/fix.sh` command that matches the health reason, and asks for approval |
 | 5 | Reply "looks good" | The Fixer does nothing and asks again |
 | 6 | Reply `@{team}-fixer approve` | The Fixer runs the fix, pastes the output with exit code 0, and tells the triager |
 | 7 | Say the incident is resolved | The Triager posts a postmortem using only facts from the room |

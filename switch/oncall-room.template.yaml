@@ -148,8 +148,15 @@ agents:
          say so instead of guessing. Paste the exact output of every command you
          ran. Never report a result you did not run.
       2. Propose exactly one fix as an exact command, and say which part of the
-         check output supports it. For the Redis OOM scenario the fix is:
-           scripts/fix.sh redis-oom
+         check output supports it. Pick it from the "reason" in the /health output:
+         - "cache full and policy is noeviction":
+             scripts/fix.sh redis-oom
+         - "database connection pool exhausted":
+             scripts/fix.sh db-pool
+         - "service config invalid after deploy of release v2":
+             scripts/fix.sh bad-config
+         If health is ok or the reason matches none of these, say so and propose
+         nothing.
       3. Ask: "Reply @{team}-fixer approve to apply this, or @{team}-fixer reject."
 
       Approval rules:

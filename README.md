@@ -83,7 +83,7 @@ In the bad-config scenario, `break.sh` deploys release v2, whose config misspell
 
 - **Human approval.** The Fixer applies a fix only after a person addresses it with "approve". Approval from another agent, or a vague "looks good", doesn't count. See [switch/agent-instructions.md](switch/agent-instructions.md).
 - **Read-only first.** The Fixer's only check is `GET /health`, which changes nothing.
-- **Sandbox only.** The demo shop listens on 127.0.0.1, and every script refuses to run unless `SHOP_URL` points at localhost. The shop's `/admin/cache/config`, `/admin/db/config` and `/admin/deploy` endpoints have no authentication; it exists only for the local sandbox and must never be exposed.
+- **Sandbox only.** The demo shop listens on 127.0.0.1, and every script refuses to run unless `SHOP_URL` points at localhost. The shop's `/admin/cache/config`, `/admin/db/config` and `/admin/deploy` endpoints have no authentication; they exist only for the local sandbox and must never be exposed.
 - **Evidence.** The RCA API drops citations to incidents it did not retrieve, and the RCA Agent may cite only IDs from the API response.
 - **Secrets.** The OpenAI key lives in `Backend/.env`, which is gitignored, and the Discord webhook URL is read from the `ALERT_WEBHOOK_URL` environment variable. Neither is committed. Demo mode needs no key at all.
 
