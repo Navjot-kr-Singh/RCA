@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Recover the local demo shop from a scenario started by break.sh, then verify.
-# Usage: scripts/fix.sh redis-oom
+# Usage: scripts/fix.sh redis-oom|db-pool|bad-config
 set -euo pipefail
 
 source "$(dirname "$0")/lib.sh"
@@ -14,8 +14,22 @@ case "$scenario" in
       -d '{"max_keys": 100, "policy": "allkeys-lru"}'
     echo
     ;;
+  db-pool)
+    echo "Fixing: releasing leaked connections, pool size -> 20"
+    curl -fsS -X POST "$SHOP_URL/admin/db/config" \
+      -H 'Content-Type: application/json' \
+      -d '{"release_leaked": true, "size": 20}'
+    echo
+    ;;
+  bad-config)
+    echo "Fixing: rolling back to release v1"
+    curl -fsS -X POST "$SHOP_URL/admin/deploy" \
+      -H 'Content-Type: application/json' \
+      -d '{"release": "v1"}'
+    echo
+    ;;
   *)
-    echo "Usage: $0 redis-oom" >&2
+    echo "Usage: $0 redis-oom|db-pool|bad-config" >&2
     exit 1
     ;;
 esac
