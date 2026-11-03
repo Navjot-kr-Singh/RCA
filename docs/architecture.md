@@ -1,7 +1,7 @@
 # Architecture
 
 ```mermaid
-flowchart TB
+flowchart LR
     alert["scripts/alert.sh<br/>or a person"] -->|"posts alert"| chat["Discord<br/>#incidents"]
     chat <-->|"bridge"| room
 
@@ -18,9 +18,9 @@ flowchart TB
 
     rca -->|"POST /analyze"| api["RCA API, FastAPI :8000<br/>2,856 past production incidents<br/>embeddings + BM25 + rerank"]
     api -->|"hypotheses + evidence IDs"| rca
-    fixer -->|"GET /health, read-only"| shop["Sandbox demo shop :8001<br/>FakeRedis cache"]
-    fixer -->|"only after approve:<br/>scripts/fix.sh redis-oom"| shop
-    breaksh["scripts/break.sh redis-oom"] -.->|"controlled failure"| shop
+    fixer -->|"GET /health, read-only"| shop["Sandbox demo shop :8001<br/>fake Redis, DB pool, release config"]
+    fixer -->|"only after approve:<br/>scripts/fix.sh redis-oom / db-pool / bad-config"| shop
+    breaksh["scripts/break.sh<br/>redis-oom / db-pool / bad-config"] -.->|"controlled failure"| shop
     triager -->|"postmortem"| learn["Learning loop<br/>POST /incidents"]
     learn -.->|"resolved incident joins the index"| api
 ```
@@ -31,7 +31,7 @@ flowchart TB
 2. **Triage.** The channel is bridged to a Switch room. The Triager restates the alert in one line, sets severity and category, and hands it to the RCA Agent by @mention.
 3. **Root cause.** The RCA Agent calls `POST /analyze`, which searches 2,856 past production incidents. It posts the top hypotheses with evidence IDs and source links, then hands `first_checks` to the Fixer.
 4. **Checks.** The Fixer runs read-only checks against the sandbox shop, pastes the exact output, and proposes one fix as an exact command.
-5. **Approval.** Nothing changes until a human in the room replies "approve". Only then does the Fixer run `scripts/fix.sh redis-oom`, which re-checks checkout and health.
+5. **Approval.** Nothing changes until a human in the room replies "approve". Only then does the Fixer run `scripts/fix.sh <scenario>` (`redis-oom`, `db-pool` or `bad-config`), which re-checks checkout and health.
 6. **Learning loop.** The Triager writes the postmortem and posts the resolved incident to `POST /incidents`. It joins the RCA index as a `LOCAL-` incident, so the next similar alert can cite it.
 
 ## Components

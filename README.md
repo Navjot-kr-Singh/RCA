@@ -14,6 +14,8 @@ Built for the Flip the Switch hackathon (WeMakeDevs × Switch).
 
 ## How it works
 
+![Architecture](docs/architecture.png)
+
 See the [architecture diagram](docs/architecture.md).
 
 1. **Alert.** `scripts/alert.sh` runs a synthetic checkout against the service. If it fails, the alert is posted in the incident channel.
@@ -68,16 +70,20 @@ Tests: `cd Backend && .venv/bin/python -m unittest tests.test_oncall tests.test_
 | Scenario | Break | Fix | Status |
 |---|---|---|---|
 | Redis out of memory: checkout returns 503 | `scripts/break.sh redis-oom` | `scripts/fix.sh redis-oom` | Ready |
-| Database connection pool exhausted | | | Planned |
-| Bad deploy or config typo | | | Planned |
+| Database connection pool exhausted: checkout returns 503 | `scripts/break.sh db-pool` | `scripts/fix.sh db-pool` | Ready |
+| Bad deploy or config typo: checkout returns 500 | `scripts/break.sh bad-config` | `scripts/fix.sh bad-config` | Ready |
 
 In the Redis scenario, `break.sh` shrinks the shop's in-memory cache and sets the `noeviction` policy, so new checkouts fail with Redis's real OOM error. `fix.sh` switches the policy to `allkeys-lru` and restores the limit, without deleting the orders already in the cache.
+
+In the database scenario, `break.sh` shrinks the shop's connection pool to 5 and leaks 5 connections that are never returned, so checkout times out waiting for a connection. `fix.sh` returns the leaked connections to the pool and sets its size back to 20.
+
+In the bad-config scenario, `break.sh` deploys release v2, whose config misspells `payment_timeout_ms`, so checkout can't read the setting and fails. `fix.sh` rolls back to release v1.
 
 ## Safety
 
 - **Human approval.** The Fixer applies a fix only after a person addresses it with "approve". Approval from another agent, or a vague "looks good", doesn't count. See [switch/agent-instructions.md](switch/agent-instructions.md).
 - **Read-only first.** The Fixer's only check is `GET /health`, which changes nothing.
-- **Sandbox only.** The demo shop listens on 127.0.0.1, and every script refuses to run unless `SHOP_URL` points at localhost. The shop's `/admin/cache/config` endpoint has no authentication; it exists only for the local sandbox and must never be exposed.
+- **Sandbox only.** The demo shop listens on 127.0.0.1, and every script refuses to run unless `SHOP_URL` points at localhost. The shop's `/admin/cache/config`, `/admin/db/config` and `/admin/deploy` endpoints have no authentication; it exists only for the local sandbox and must never be exposed.
 - **Evidence.** The RCA API drops citations to incidents it did not retrieve, and the RCA Agent may cite only IDs from the API response.
 - **Secrets.** The OpenAI key lives in `Backend/.env`, which is gitignored, and the Discord webhook URL is read from the `ALERT_WEBHOOK_URL` environment variable. Neither is committed. Demo mode needs no key at all.
 
@@ -114,7 +120,7 @@ Describe a production issue in plain words and get likely root causes, recommend
 | `Frontend/` | React + Vite analysis app. |
 | `Landing/` | Public site (Next.js, Clerk sign-in): landing page, dashboard, privacy and terms. See its own README. |
 | `dataset/` | The incident datasets and the scripts that built them. |
-| `demo-shop/` | Sandbox checkout service with a fake Redis, used for the incident demo. |
+| `demo-shop/` | Sandbox checkout service with a fake Redis, a fake database pool and per-release config, used for the incident demo. |
 | `scripts/` | `break.sh`, `fix.sh` and `alert.sh` for the demo scenarios. |
 | `switch/` | Switch template and agent instructions for the incident room. |
 | `docs/` | Architecture diagram. |

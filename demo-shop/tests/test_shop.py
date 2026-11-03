@@ -1,6 +1,7 @@
-"""Tests for the demo shop: the cache on its own, then the full break -> fix flow.
+"""Tests for the demo shop: the cache, pool and config on their own, then the
+full break -> fix flow of each scenario.
 
-    .venv/bin/python -m unittest tests.test_shop -v
+    ../Backend/.venv/bin/python -m unittest tests.test_shop -v
 """
 import logging
 import unittest
@@ -9,6 +10,8 @@ from fastapi.testclient import TestClient
 
 import main
 from cache import FakeRedis, RedisOOMError
+from config import ConfigError, ServiceConfig
+from db import FakeDBPool, PoolTimeoutError
 
 # Hide the shop's request logs so the test results are easy to read.
 logging.disable(logging.CRITICAL)
@@ -39,10 +42,56 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(c.max_keys, 10)
 
 
+class DBPoolTests(unittest.TestCase):
+    def test_full_pool_times_out(self):
+        p = FakeDBPool(size=2)
+        p.acquire()
+        p.acquire()
+        with self.assertRaises(PoolTimeoutError) as e:
+            p.acquire()
+        for words in ("connection pool", "exhausted", "timeout waiting for a connection"):
+            self.assertIn(words, str(e.exception))
+
+    def test_release_leaked_makes_pool_work_again(self):
+        p = FakeDBPool(size=5)
+        p.leak(5)
+        with self.assertRaises(PoolTimeoutError):
+            p.acquire()
+        p.release_leaked()
+        p.acquire()
+        self.assertEqual(p.info(), {"size": 5, "in_use": 1, "leaked": 0})
+
+    def test_invalid_size_changes_nothing(self):
+        p = FakeDBPool(size=10)
+        with self.assertRaises(ValueError):
+            p.config_set(size=0)
+        self.assertEqual(p.size, 10)
+
+
+class ConfigTests(unittest.TestCase):
+    def test_v2_raises_config_error(self):
+        c = ServiceConfig("v2")
+        with self.assertRaises(ConfigError) as e:
+            c.get_setting("payment_timeout_ms")
+        for word in ("config", "typo", "release", "deploy"):
+            self.assertIn(word, str(e.exception))
+
+    def test_v1_reads_setting(self):
+        self.assertEqual(ServiceConfig("v1").get_setting("payment_timeout_ms"), 3000)
+
+    def test_unknown_release_rejected(self):
+        c = ServiceConfig("v1")
+        with self.assertRaises(ValueError):
+            c.deploy("v3")
+        self.assertEqual(c.current_release, "v1")
+
+
 class ShopTests(unittest.TestCase):
     def setUp(self):
-        # Fresh, healthy cache for every test so tests don't affect each other.
+        # Fresh, healthy cache, pool and config for every test so tests don't affect each other.
         main.cache = FakeRedis(max_keys=100, policy="allkeys-lru")
+        main.db = FakeDBPool(size=20)
+        main.config = ServiceConfig("v1")
         self.client = TestClient(main.app)
 
     def break_cache(self):
@@ -82,6 +131,52 @@ class ShopTests(unittest.TestCase):
         r = self.client.post("/admin/cache/config", json={"max_keys": 5, "policy": "lru"})
         self.assertEqual(r.status_code, 400)
         self.assertEqual(self.client.get("/health").json()["cache"]["max_keys"], 100)
+
+    def test_db_pool_break_and_fix(self):
+        r = self.client.post("/admin/db/config", json={"size": 5, "leak": 5})
+        self.assertEqual(r.status_code, 200)
+        r = self.client.post("/checkout", json=ORDER)
+        self.assertEqual(r.status_code, 503)
+        self.assertEqual(r.json()["error"], "db_pool_exhausted")
+        health = self.client.get("/health")
+        self.assertEqual(health.status_code, 503)
+        self.assertEqual(health.json()["reason"], "database connection pool exhausted")
+
+        r = self.client.post("/admin/db/config", json={"release_leaked": True, "size": 20})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self.client.post("/checkout", json=ORDER).status_code, 200)
+        health = self.client.get("/health")
+        self.assertEqual(health.status_code, 200)
+        self.assertEqual(health.json()["db"], {"size": 20, "in_use": 0, "leaked": 0})
+
+    def test_bad_config_break_and_rollback(self):
+        r = self.client.post("/admin/deploy", json={"release": "v2"})
+        self.assertEqual(r.status_code, 200)
+        r = self.client.post("/checkout", json=ORDER)
+        self.assertEqual(r.status_code, 500)
+        self.assertEqual(r.json()["error"], "config_error")
+        health = self.client.get("/health")
+        self.assertEqual(health.status_code, 503)
+        self.assertEqual(health.json()["reason"], "service config invalid after deploy of release v2")
+
+        r = self.client.post("/admin/deploy", json={"release": "v1"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self.client.post("/checkout", json=ORDER).status_code, 200)
+        health = self.client.get("/health")
+        self.assertEqual(health.status_code, 200)
+        self.assertEqual(health.json()["release"], "v1")
+
+    def test_health_only_reads(self):
+        self.client.post("/admin/db/config", json={"size": 5, "leak": 5})
+        before = self.client.get("/health").json()
+        self.client.get("/health")
+        self.assertEqual(self.client.get("/health").json(), before)
+
+    def test_invalid_db_config_and_release_rejected(self):
+        self.assertEqual(self.client.post("/admin/db/config", json={"size": 0, "leak": 5}).status_code, 400)
+        self.assertEqual(self.client.get("/health").json()["db"], {"size": 20, "in_use": 0, "leaked": 0})
+        self.assertEqual(self.client.post("/admin/deploy", json={"release": "v3"}).status_code, 400)
+        self.assertEqual(self.client.get("/health").json()["release"], "v1")
 
 
 if __name__ == "__main__":
