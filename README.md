@@ -6,6 +6,10 @@ OnCall Room turns a Discord channel into an incident war room. When an alert arr
 
 Built for the Flip the Switch hackathon (WeMakeDevs × Switch).
 
+## Demo video
+
+[Watch the 2:24 demo](docs/demo.mp4): an alert in Discord, the three agents handing off, a person approving the fix, and the learning loop.
+
 ## The problem
 
 - An alert fires at 3 AM, and the on-call engineer is alone with the logs and a search engine.
